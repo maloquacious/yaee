@@ -6,14 +6,18 @@ It is complete: a reader can be written from it without any other source.
 A datafile holds one generated world: the samples spread over a sphere, the triangulation that connects them, and named data for each sample.
 The Go functions `yaee.Write` and `yaee.Read` write and read it.
 
-The conventional file name extension is `.yaee`. Nothing depends on it.
+The conventional file name extension is `.yaee`.
+Nothing depends on it.
 
 ## Conventions
 
-- The file is a sequence of bytes. Offsets and lengths are in bytes.
-- Every multi-byte number is **little-endian**. There is no padding or alignment anywhere.
+- The file is a sequence of bytes.
+  Offsets and lengths are in bytes.
+- Every multi-byte number is **little-endian**.
+  There is no padding or alignment anywhere.
 - The file is not compressed.
-- The same world always encodes to the same bytes. The file holds no timestamp, host name, or other data that is not part of the world.
+- The same world always encodes to the same bytes.
+  The file holds no timestamp, host name, or other data that is not part of the world.
 
 | Type | Width | Encoding |
 |------|-------|----------|
@@ -46,7 +50,8 @@ section = kind length payload checksum
 
 ### Section
 
-Every section has the same envelope. Offsets are from the start of the section; L is the payload length.
+Every section has the same envelope.
+Offsets are from the start of the section; L is the payload length.
 
 | Offset | Width | Type | Field | Meaning |
 |--------|-------|------|-------|---------|
@@ -97,11 +102,14 @@ Members of `config`:
 | `duration_my` | number | My | at least 0 | Span of time simulated |
 | `time_step_my` | number | My | greater than 0 | Length of one simulation step |
 
-`seed` can exceed 2^53. A JSON parser that reads every number as an IEEE 754 double corrupts such a seed; use a parser that keeps 64-bit integers if the seed matters to you.
+`seed` can exceed 2^53.
+A JSON parser that reads every number as an IEEE 754 double corrupts such a seed; use a parser that keeps 64-bit integers if the seed matters to you.
 
-A later version of the library may add members to either object without changing the format version. A reader must ignore members it does not know.
+A later version of the library may add members to either object without changing the format version.
+A reader must ignore members it does not know.
 
-The number of samples is in the `SMPL` section. Do not compute it from `config`.
+The number of samples is in the `SMPL` section.
+Do not compute it from `config`.
 
 ### `SMPL`
 
@@ -112,13 +120,16 @@ The number of samples is in the `SMPL` section. Do not compute it from `config`.
 
 The payload length is exactly 4 + 24 × N.
 
-Samples are numbered from 0 to N − 1 in the order stored. The x coordinate of sample i is at payload offset 4 + 24 × i, y at 12 + 24 × i, and z at 20 + 24 × i.
+Samples are numbered from 0 to N − 1 in the order stored.
+The x coordinate of sample i is at payload offset 4 + 24 × i, y at 12 + 24 × i, and z at 20 + 24 × i.
 
-A position is a unit vector from the centre of the sphere: x² + y² + z² = 1 to within 1e-12. It has no unit.
+A position is a unit vector from the centre of the sphere: x² + y² + z² = 1 to within 1e-12.
+It has no unit.
 
 - The +z axis passes through the north pole.
 - Latitude in radians is `asin(z)`, from −π/2 at the south pole to π/2 at the north pole.
-- Longitude in radians is `atan2(y, x)`, from −π to π, positive toward the east. Longitude 0 is the half-plane y = 0, x > 0.
+- Longitude in radians is `atan2(y, x)`, from −π to π, positive toward the east.
+  Longitude 0 is the half-plane y = 0, x > 0.
 - The sample's point at sea level, in km from the centre, is `radius_km` × (x, y, z).
 - The sample's point on the surface, in km from the centre, is (`radius_km` + elevation) × (x, y, z), where elevation is the sample's value of the `elevation` attribute.
 
@@ -132,7 +143,8 @@ The samples are spread evenly: each represents the same area, 4π × `radius_km`
 | 0 | 4 | `u32` | T | The number of triangles |
 | 4 | 12 × T | `u32` × 3 × T | corners | For each triangle in order: the sample numbers of its three corners |
 
-The payload length is exactly 4 + 12 × T. Every corner is less than N.
+The payload length is exactly 4 + 12 × T.
+Every corner is less than N.
 
 The triangles are the Delaunay triangulation of the samples on the sphere.
 
@@ -140,9 +152,12 @@ The triangles are the Delaunay triangulation of the samples on the sphere.
 - The triangles cover the sphere with no gaps and no overlaps.
 - The corners of each triangle are listed counter-clockwise as seen from outside the sphere.
 - Every sample is a corner of at least three triangles.
-- Every edge belongs to exactly two triangles. If one triangle has corners a then b in that cyclic order, the other has b then a.
+- Every edge belongs to exactly two triangles.
+  If one triangle has corners a then b in that cyclic order, the other has b then a.
 
-**Neighbours.** Two samples are neighbours when some triangle has both as corners. To build every sample's list of neighbours: for each triangle (a, b, c), add b and c to the set of a, a and c to the set of b, and a and b to the set of c. The sets together hold 6 × N − 12 entries, an average of just under 6 per sample.
+**Neighbours.** Two samples are neighbours when some triangle has both as corners.
+To build every sample's list of neighbours: for each triangle (a, b, c), add b and c to the set of a, a and c to the set of b, and a and b to the set of c.
+The sets together hold 6 × N − 12 entries, an average of just under 6 per sample.
 
 ### `ATTR`
 
@@ -168,16 +183,20 @@ Element types:
 | 4 | float64 | 8 | `f64` |
 
 The payload length is exactly 1 + A + 1 + U + 2 + S × C × N.
-The data begins at payload offset D = 4 + A + U. Component k (from 0) of sample i is at payload offset D + S × (C × i + k).
+The data begins at payload offset D = 4 + A + U.
+Component k (from 0) of sample i is at payload offset D + S × (C × i + k).
 
-A scalar attribute has C = 1. A vector attribute has C = 3 and stores x, y, z on the same axes as the positions.
+A scalar attribute has C = 1.
+A vector attribute has C = 3 and stores x, y, z on the same axes as the positions.
 
 `SMPL` comes before every `ATTR`, so N is known when an attribute is read.
 
 A later version of the library may add attributes, and may add element type codes, without changing the format version.
 
-- An attribute with a name the reader does not know is valid data. A reader that has no use for it skips the section.
-- An attribute with an element type code the reader does not know cannot be decoded, because S is unknown. The reader must skip the section, using the section's length, and carry on.
+- An attribute with a name the reader does not know is valid data.
+  A reader that has no use for it skips the section.
+- An attribute with an element type code the reader does not know cannot be decoded, because S is unknown.
+  The reader must skip the section, using the section's length, and carry on.
 
 #### Attributes written
 
@@ -187,37 +206,61 @@ Library version 0.7.0-alpha writes one attribute:
 |------|--------------|------------|------|-------|---------|
 | `elevation` | 4 (float64) | 1 | `km` | −6.606 to 3.000 | Height of the surface above sea level. Negative values are below sea level; 0 is sea level |
 
-In this library version `elevation` is a placeholder, not a simulated value. For a sample at (x, y, z) it is 4 × (x² − y²) + 6 × y × z − 1. A later version replaces it with simulated elevation and a wider range, under the same name, type, component count, and unit.
+In this library version `elevation` is a placeholder, not a simulated value.
+For a sample at (x, y, z) it is 4 × (x² − y²) + 6 × y × z − 1.
+A later version replaces it with simulated elevation and a wider range, under the same name, type, component count, and unit.
 
 ### `END `
 
 The payload is empty: the length is 0.
-The file ends with the last byte of this section's checksum. Because the kind and length are fixed, the section is always the same 16 bytes: `45 4e 44 20 00 00 00 00 00 00 00 00 1f 11 8b 42`.
+The file ends with the last byte of this section's checksum.
+Because the kind and length are fixed, the section is always the same 16 bytes: `45 4e 44 20 00 00 00 00 00 00 00 00 1f 11 8b 42`.
 
 ## Reading a file
 
-Follow these steps in order. "Reject" means stop and report an error; do not use any data from a rejected file.
+Follow these steps in order.
+"Reject" means stop and report an error; do not use any data from a rejected file.
 
-1. Read 12 bytes. If fewer are available, reject: the file is truncated.
+1. Read 12 bytes.
+   If fewer are available, reject: the file is truncated.
 2. If bytes 0 to 7 are not `59 41 45 45 44 41 54 41`, reject: the input is not a `yaee` datafile.
-3. Read bytes 8 to 11 as a `u32`. If it is not 1, reject: the format version is not supported. Report the version found. Do not try to read a file of another version by these rules.
+3. Read bytes 8 to 11 as a `u32`.
+   If it is not 1, reject: the format version is not supported.
+   Report the version found.
+   Do not try to read a file of another version by these rules.
 4. Read a section:
-   1. Read 12 bytes: the kind and the length L. If fewer are available, reject: truncated.
-   2. Read L bytes of payload. If fewer are available, reject: truncated. L comes from the file and may be wrong in a damaged file, so do not allocate L bytes before checking that the input has them.
-   3. Read 4 bytes: the checksum. If fewer are available, reject: truncated.
-   4. Compute the CRC-32 of the 12 + L bytes of kind, length, and payload. If it differs from the checksum, reject: the file is corrupt.
+   1. Read 12 bytes: the kind and the length L.
+      If fewer are available, reject: truncated.
+   2. Read L bytes of payload.
+      If fewer are available, reject: truncated.
+      L comes from the file and may be wrong in a damaged file, so do not allocate L bytes before checking that the input has them.
+   3. Read 4 bytes: the checksum.
+      If fewer are available, reject: truncated.
+   4. Compute the CRC-32 of the 12 + L bytes of kind, length, and payload.
+      If it differs from the checksum, reject: the file is corrupt.
 5. Act on the kind:
-   - `META`: parse the payload as JSON. Reject if it is not a JSON object with a string `library_version` and an object `config`, or if this is the second `META`.
-   - `SMPL`: read N. Reject if L is not 4 + 24 × N, or if this is the second `SMPL`. Read the positions.
-   - `TRIS`: read T. Reject if no `SMPL` has been read, if L is not 4 + 12 × T, if any corner is N or more, or if this is the second `TRIS`. Read the corners.
-   - `ATTR`: reject if no `SMPL` has been read. Read the name, unit, element type, and component count; reject if the payload ends before they do, if the name is empty, if the component count is 0, or if an earlier `ATTR` had the same name. If the element type code is unknown, skip the rest of the section. Otherwise reject if L is not 1 + A + 1 + U + 2 + S × C × N, then read the data, or skip it if the reader has no use for the attribute.
-   - `END `: reject if L is not 0, or if `META`, `SMPL`, and `TRIS` have not each been read. Otherwise the file has been read successfully: stop.
-   - Any other kind: ignore the payload. Its checksum has already been verified in step 4.
+   - `META`: parse the payload as JSON.
+     Reject if it is not a JSON object with a string `library_version` and an object `config`, or if this is the second `META`.
+   - `SMPL`: read N.
+     Reject if L is not 4 + 24 × N, or if this is the second `SMPL`.
+     Read the positions.
+   - `TRIS`: read T.
+     Reject if no `SMPL` has been read, if L is not 4 + 12 × T, if any corner is N or more, or if this is the second `TRIS`.
+     Read the corners.
+   - `ATTR`: reject if no `SMPL` has been read.
+     Read the name, unit, element type, and component count; reject if the payload ends before they do, if the name is empty, if the component count is 0, or if an earlier `ATTR` had the same name.
+     If the element type code is unknown, skip the rest of the section.
+     Otherwise reject if L is not 1 + A + 1 + U + 2 + S × C × N, then read the data, or skip it if the reader has no use for the attribute.
+   - `END `: reject if L is not 0, or if `META`, `SMPL`, and `TRIS` have not each been read.
+     Otherwise the file has been read successfully: stop.
+   - Any other kind: ignore the payload.
+     Its checksum has already been verified in step 4.
 6. Go to step 4.
 
 A file that ends before an `END ` section is truncated, however many complete sections came before; step 4.1 detects this.
 
-Bytes after the `END ` section are not part of the datafile. `yaee.Read` stops reading at the end of that section and does not look for more.
+Bytes after the `END ` section are not part of the datafile.
+`yaee.Read` stops reading at the end of that section and does not look for more.
 
 ### Errors from the Go reader
 
@@ -249,7 +292,8 @@ The default world has N = 942,059 and, with the `elevation` attribute alone, is 
 
 ## Example
 
-The file `testdata/example.yaee` in the repository is 535 bytes. It is the world generated by library version 0.7.0-alpha from this configuration, which gives N = 6 samples and T = 8 triangles:
+The file `testdata/example.yaee` in the repository is 535 bytes.
+It is the world generated by library version 0.7.0-alpha from this configuration, which gives N = 6 samples and T = 8 triangles:
 
 ```json
 {"seed":42,"radius_km":6370,"sample_spacing_km":10000,"duration_my":250,"time_step_my":2}
@@ -261,7 +305,9 @@ Its `META` payload is these 132 bytes of text:
 {"library_version":"0.7.0-alpha","config":{"seed":42,"radius_km":6370,"sample_spacing_km":10000,"duration_my":250,"time_step_my":2}}
 ```
 
-Every byte of the file is listed below. The first column is the offset in hexadecimal, the second the bytes in hexadecimal, and the third the field they encode. A field longer than 16 bytes continues on the following lines.
+Every byte of the file is listed below.
+The first column is the offset in hexadecimal, the second the bytes in hexadecimal, and the third the field they encode.
+A field longer than 16 bytes continues on the following lines.
 
 <!-- example:begin -->
 ```text
@@ -339,9 +385,12 @@ Every byte of the file is listed below. The first column is the offset in hexade
 ```
 <!-- example:end -->
 
-From the listing: sample 0 is at latitude asin(0.8333333333333334) = 0.9851 radians (56.44° north) and longitude atan2(0, 0.5527707983925666) = 0. Its elevation is 0.2222 km, so its point on the surface is 6370.2222 × (0.5527707983925666, 0, 0.8333333333333334) km from the centre. Its neighbours, from triangles 0, 1, 5, and 7, are samples 1, 2, 3, and 5.
+From the listing: sample 0 is at latitude asin(0.8333333333333334) = 0.9851 radians (56.44° north) and longitude atan2(0, 0.5527707983925666) = 0.
+Its elevation is 0.2222 km, so its point on the surface is 6370.2222 × (0.5527707983925666, 0, 0.8333333333333334) km from the centre.
+Its neighbours, from triangles 0, 1, 5, and 7, are samples 1, 2, 3, and 5.
 
-This Go program reads the example and prints what the listing shows. Run it from the repository root:
+This Go program reads the example and prints what the listing shows.
+Run it from the repository root:
 
 ```go
 package main
