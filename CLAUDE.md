@@ -3,6 +3,7 @@
 `yaee` is a Go library that generates worlds by simulating plate tectonics on a sphere.
 Process rules (checks, versioning, commits, where scratch files go) are in @WORKFLOW.md.
 This file says what we are building; WORKFLOW.md says how we work.
+The order in which it gets built, and what "done" means for each step, are in [PLAN.md](PLAN.md).
 If the two disagree about what the product is, this file wins.
 
 ## What we are building
@@ -11,6 +12,8 @@ A world **generator**, not a visualizer.
 
 - **The product is a datafile.** Other applications read it to build their own world maps.
   Its format is a public contract, as much as the Go API is.
+  It holds the generator's native samples; it is not resampled to any client's grid.
+- **The users are coding agents.** They call the library, run the command, and write datafile readers for programs not written in Go.
 - **The library is called directly by other applications**, so the root package has a stable public API.
 - **The command line tool is for us**: it exists to develop and test the generator.
 - **Images are for the human to check the "look" of a world.**
@@ -99,7 +102,8 @@ Rules for `Config`:
 - The zero value is not a valid configuration. `Validate` rejects bad values with an error naming the field; nothing silently replaces a zero with a default, because zero is a legitimate value for some parameters.
 - Every field's doc comment states its unit and its default.
 - The datafile embeds the `Config` and the library version that produced it.
-- The same `Config`, including its seed, produces the same datafile byte for byte. All randomness comes from the seed; never from the clock, map iteration order, or goroutine scheduling.
+- The same `Config`, including its seed, produces the same datafile byte for byte on the same CPU architecture.
+  ARM and AMD may produce different output, because they do not round floating point arithmetic identically; that is accepted, so do not write code or tests to make them agree. All randomness comes from the seed; never from the clock, map iteration order, or goroutine scheduling.
   That rules out the package-level functions of `math/rand/v2`, which cannot be seeded: draw from a `*rand.Rand` built from the configured seed.
 
 The public surface is the root package `yaee` only.
@@ -109,6 +113,18 @@ Changing an exported name, the datafile format, or the output for a given seed i
 The library does not print, read the environment, read flags, or exit.
 It returns errors and accepts a `context.Context` so a caller can cancel a long run.
 Those other things belong to the command.
+
+## Documentation
+
+Documentation is written for coding agents, not for people.
+That covers doc comments, the command's help output, the datafile specification, and everything under `docs/`.
+
+- Assume the reader has only the document, and will act on it without asking a question.
+- Be exact: every unit, type, range, default, byte layout, and error. An agent writes a datafile reader in another language from the specification alone.
+- Give examples that run and whose output is shown.
+- Leave out motivation, history, and tutorial narrative.
+
+The command is used by agents too: it never prompts, it reports errors on standard error with a non-zero exit status, and its help output lists every flag and default.
 
 ## Layout
 

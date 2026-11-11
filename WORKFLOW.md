@@ -37,7 +37,7 @@ The model is verified in Go, by tests.
 - Every algorithm lands with the tests that define what correct means for it: an analytic case, an invariant, or a conservation budget.
 - A test that needs a grid uses the smallest detail that shows the behavior, so `go test ./...` stays fast.
   Long runs belong behind `testing.Short`.
-- A run must be repeatable: the same seed and flags give the same file, byte for byte.
+- A run must be repeatable: the same seed and flags give the same file, byte for byte, on the same CPU architecture.
   Any change that alters the output for a given seed says so in its commit message.
 
 ## Versioning
