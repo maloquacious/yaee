@@ -410,7 +410,7 @@ Done when:
 - Larger continental plates rift more often than smaller ones.
 - A 250 My full-scale run neither collapses into one continent nor shatters into fragments, and the reviewer accepts the images.
 
-**Built** in version 0.18.0-alpha; the images await the reviewer. The code is `internal/tectonics/rift.go` (`DrawRifts`, `Rift`, `RemoveEmptyPlates`, `Subduction.Renumber`) and the resampling rule of `simulate`.
+**Done** in version 0.18.0-alpha. The reviewer accepted the images on 2026-11-11, with the too-high land below left for milestone 9 and the thin seas for [#32](https://github.com/maloquacious/yaee/issues/32). The code is `internal/tectonics/rift.go` (`DrawRifts`, `Rift`, `RemoveEmptyPlates`, `Subduction.Renumber`) and the resampling rule of `simulate`.
 
 What was built, where the paper and the plan left a choice:
 
@@ -443,7 +443,7 @@ Seen in the images:
 - Land is in several continents instead of one mass, and the number of plates holds.
 - For milestone 9: the land is higher again. Fragments set off at up to v_0 and run into their neighbours, so a run has two to three times the collisions, and each raises its suture toward z_c. The median continental elevation of seed 1 went from 4.8 km to 7.4 km.
 - For milestone 9: oceanic crust above sea level went from 0.9% to 3 to 6% of the samples, along subduction fronts.
-- Thin seas one or two samples wide run through some continents. The one traced (seed 2) lies inside a single plate: a rift that opened a narrow sea, after which the two fragments collided and joined with the sea still between them. A collision moves the terranes and what they enclose; it does not close the ocean between them.
+- Thin seas one or two samples wide run through some continents. The one traced (seed 2) lies inside a single plate: a rift that opened a narrow sea, after which the two fragments collided and joined with the sea still between them. A collision moves the terranes and what they enclose; it does not close the ocean between them. To be investigated after milestone 9: [#32](https://github.com/maloquacious/yaee/issues/32).
 - At `RiftingRate` 0.006 and above the land breaks into many small pieces and the number of plates grows through the run (51 to 62 at 250 My for seeds 1 to 3).
 
 ### 9. An Earth-like default
@@ -480,6 +480,7 @@ Done when:
 
 Not planned in detail. Each needs its own plan when its turn comes.
 
+- **Thin seas.** [#32](https://github.com/maloquacious/yaee/issues/32): investigate the lines of sea one or two samples wide that run through continents. After milestone 9.
 - **Erosion.** A further stage after tectonics. References: Cordonnier et al. 2016, which combines tectonic uplift with fluvial erosion, and Tzathas et al. 2024, which gives an analytical erosion model. Both want an uplift rate per sample, which the tectonic stage computes; milestone 6 should keep it in the world data, not discard it after applying it.
 - **Relief.** Depends on the open decision above.
 - **Biomes.** A further stage after erosion. It will need climate inputs that nothing in this plan produces.
