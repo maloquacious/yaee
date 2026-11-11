@@ -61,6 +61,7 @@ go run ./cmd/yaee render -in tmp/world.yaee -kind plates -out tmp/plates.png
 go run ./cmd/yaee render -in tmp/world.yaee -kind crust -out tmp/crust.png
 go run ./cmd/yaee render -in tmp/world.yaee -kind age -out tmp/age.png
 go run ./cmd/yaee render -in tmp/world.yaee -kind orogeny -out tmp/orogeny.png
+go run ./cmd/yaee stats -in tmp/world.yaee
 go run ./cmd/yaee help
 ```
 

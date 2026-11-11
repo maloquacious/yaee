@@ -115,8 +115,9 @@ const (
 	//
 	// A sample becomes OrogenyAndean, with orogeny age 0, when
 	// subduction raises it above sea level, or raises it while it is
-	// above sea level and has no orogeny type. As of this version no
-	// sample is OrogenyHimalayan.
+	// above sea level and has no orogeny type. A sample of continental
+	// crust becomes OrogenyHimalayan, with orogeny age 0, when a
+	// continental collision raises it.
 	AttrOrogenyType = "orogeny_type"
 
 	// AttrFoldDirection is the direction in which the crust is folded

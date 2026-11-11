@@ -107,6 +107,7 @@ This departs from the paper, which tracks intersections between boundary triangl
 | `internal/noise` | Seeded coherent noise in three dimensions |
 | `internal/tectonics` | Plates, motion, resampling, and the four phenomena |
 | `internal/render` | Check images, drawn from a `World` |
+| `internal/stats` | Measurements of a `World`, for tuning and review |
 | `cmd/yaee` | The development command |
 
 ## Milestones
@@ -453,6 +454,8 @@ Tracked by [#9](https://github.com/maloquacious/yaee/issues/9), with sub-issues 
 Low-frequency noise (§4.5). Tuning `DefaultConfig` so that a default run looks like an Earth-like world. Profiling and speeding up the full-scale run. A summary command that reports statistics for a datafile.
 
 The open decision on relief is settled before this milestone closes.
+
+9.3 ([#31](https://github.com/maloquacious/yaee/issues/31)) is **done** in version 0.19.0-alpha: `yaee stats -in file` prints measurements of a datafile as JSON, and `yaee help stats` gives every member with its unit. The code is `internal/stats`. Beyond the issue's list it reports land that is oceanic crust, elevation by crust type with quantiles, continents and landmasses (connected regions whatever their plates), and the share of each orogeny type; tuning needs them. Fractions are of the sphere's area, not of the sample count.
 
 Done when:
 

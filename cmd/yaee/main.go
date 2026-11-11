@@ -24,6 +24,7 @@ import (
 
 	"github.com/maloquacious/yaee"
 	"github.com/maloquacious/yaee/internal/render"
+	"github.com/maloquacious/yaee/internal/stats"
 )
 
 // Exit statuses.
@@ -47,6 +48,7 @@ Usage:
 Commands:
   generate   Generate a world and write it as a datafile.
   render     Read a datafile and write an image of it.
+  stats      Read a datafile and print measurements of its world as JSON.
   version    Print the version of the yaee library.
   help       Print this text. "yaee help <command>" prints a command's help.
 
@@ -59,7 +61,7 @@ The datafile format is specified in docs/datafile.md.
 
 Output:
   Standard output carries only what a command is asked to print: help,
-  the version, or a Config written to "-". Errors, and the timings of
+  the version, the output of stats, or a Config written to "-". Errors, and the timings of
   -v, go to standard error.
 
 Exit status:
@@ -88,7 +90,7 @@ func (e usageError) Error() string { return e.msg }
 // commands returns the sub-commands, freshly built so that a flag's
 // value never survives from one run to the next.
 func commands() []*command {
-	return []*command{generateCommand(), renderCommand(), versionCommand()}
+	return []*command{generateCommand(), renderCommand(), statsCommand(), versionCommand()}
 }
 
 // run executes the command line and returns the exit status.
@@ -234,7 +236,7 @@ written.
 The Config file is one JSON object. This is the default Config:
 %s
 The same Config gives the same datafile, byte for byte, on the same CPU
-architecture. The default world takes about 30 seconds to generate on
+architecture. The default world takes about 40 seconds to generate on
 ten processors, and its datafile is about 134 MB. -duration 0 gives the
 initial world, before any plate has moved.
 
@@ -466,6 +468,65 @@ Example:
 					read.Sub(start).Seconds(), drawn.Sub(read).Seconds(), time.Since(drawn).Seconds())
 			}
 			return nil
+		},
+	}
+}
+
+func statsCommand() *command {
+	fs := flag.NewFlagSet("stats", flag.ContinueOnError)
+	inPath := fs.String("in", "", "Read the world from the datafile in this `file`. Required.")
+	return &command{
+		name:    "stats",
+		summary: "yaee stats reads a datafile and prints measurements of its world as JSON.",
+		notes: fmt.Sprintf(`The measurements are made from the datafile alone. The datafile must
+have the attributes plate, crust_type, elevation, oceanic_age, and
+orogeny_type; without one of them the command fails.
+
+Standard output is one JSON object, indented by two spaces and ended by
+a newline. The same datafile gives the same bytes. Numbers are written
+with the fewest digits that give the same 64-bit value back.
+
+The area of a sample is one third of the area of every triangle that
+has the sample as a corner, so the areas of all samples sum to the area
+of the sphere. Every fraction is a share of the sphere's area, not of
+the number of samples. Two samples are neighbours when some triangle has
+both as corners.
+
+These are the members, in the order they are written. A name with a
+"." is a member of the object named before the ".": plates.count is
+the member "count" of the object that is the member "plates".
+
+%s
+Example:
+  yaee stats -in tmp/world.yaee
+`, stats.Help()),
+		flags: fs,
+		run: func(ctx context.Context, stdout, stderr io.Writer) error {
+			if *inPath == "" {
+				return usageError{"-in is required"}
+			}
+			f, err := os.Open(*inPath)
+			if err != nil {
+				return err
+			}
+			world, err := yaee.Read(f)
+			f.Close()
+			if err != nil {
+				return fmt.Errorf("%s: %w", *inPath, err)
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			s, err := stats.Measure(world)
+			if err != nil {
+				return fmt.Errorf("%s: %w", *inPath, err)
+			}
+			data, err := json.MarshalIndent(s, "", "  ")
+			if err != nil {
+				return err
+			}
+			_, err = stdout.Write(append(data, '\n'))
+			return err
 		},
 	}
 }

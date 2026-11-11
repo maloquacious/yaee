@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/maloquacious/yaee"
+	"github.com/maloquacious/yaee/internal/stats"
 )
 
 // yaeeRun runs the command and returns its exit status and output.
@@ -184,6 +185,49 @@ func TestConfigFileAndWriteConfig(t *testing.T) {
 	}
 }
 
+// stats prints one JSON object, the same for the same datafile, that
+// agrees with the datafile, and its help describes every member.
+func TestStats(t *testing.T) {
+	dir := t.TempDir()
+	world := filepath.Join(dir, "world.yaee")
+	mustRun(t, "generate", "-seed", "3", "-spacing", "500", "-duration", "20", "-out", world)
+
+	status, stdout, stderr := yaeeRun(t, "stats", "-in", world)
+	if status != 0 || stderr != "" {
+		t.Fatalf("status %d, stderr %q", status, stderr)
+	}
+	if _, again, _ := yaeeRun(t, "stats", "--in="+world); again != stdout {
+		t.Error("two runs of stats printed different text")
+	}
+	if !strings.HasPrefix(stdout, "{\n  \"library_version\": ") || !strings.HasSuffix(stdout, "\n}\n") {
+		t.Errorf("the output is not one indented object ended by a newline: %q", stdout)
+	}
+	var got stats.Stats
+	dec := json.NewDecoder(strings.NewReader(stdout))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&got); err != nil {
+		t.Fatalf("the output is not the JSON of a Stats: %v", err)
+	}
+
+	w, err := yaee.Read(bytes.NewReader(readFile(t, world)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LibraryVersion != yaee.Version().String() || got.Samples != w.NumSamples() || got.Triangles != w.NumTriangles() || got.Radius != 6370 {
+		t.Errorf("stats reports version %q, %d samples, %d triangles, radius %g", got.LibraryVersion, got.Samples, got.Triangles, got.Radius)
+	}
+	if got.ContinentalFraction < 0.2 || got.ContinentalFraction > 0.4 || got.Plates.Count < 20 || got.Elevation.Min >= 0 || got.Elevation.Max <= 0 {
+		t.Errorf("stats does not describe the default world: %+v", got)
+	}
+
+	_, help, _ := yaeeRun(t, "help", "stats")
+	for _, k := range stats.Keys() {
+		if !strings.Contains(help, "\n  "+k.Path+"\n      Unit: "+k.Unit+"\n") {
+			t.Errorf("the help of stats does not give %q with its unit %q", k.Path, k.Unit)
+		}
+	}
+}
+
 func TestVersion(t *testing.T) {
 	status, stdout, stderr := yaeeRun(t, "version")
 	if status != 0 || stdout != yaee.Version().String()+"\n" || stderr != "" {
@@ -233,6 +277,9 @@ func TestFailures(t *testing.T) {
 		{"generate without outputs", []string{"generate"}, 2, []string{"at least one of -out and -write-config is required"}},
 		{"render without -in", []string{"render", "-out", filepath.Join(dir, "x.png")}, 2, []string{"-in and -out are both required"}},
 		{"render without -out", []string{"render", "-in", world}, 2, []string{"-in and -out are both required"}},
+		{"stats without -in", []string{"stats"}, 2, []string{"-in is required"}},
+		{"stats of a missing file", []string{"stats", "-in", missing}, 1, []string{missing}},
+		{"stats of a file that is not a datafile", []string{"stats", "-in", notDatafile}, 1, []string{notDatafile, "not a datafile"}},
 		{"version with argument", []string{"version", "now"}, 2, []string{`unexpected argument "now"`}},
 
 		{"invalid Config", []string{"generate", "-radius", "-5", "-time-step", "0", "-out", filepath.Join(dir, "bad.yaee")}, 1,
