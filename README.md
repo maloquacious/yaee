@@ -9,7 +9,8 @@ Its output is a datafile that other applications read to build their own world m
 
 Early alpha. **It does not simulate tectonics yet.**
 The sphere, the public API, the datafile format, and the command work at full scale.
-A generated world has its initial plates and its initial crust, continents and oceans, and no plate moves yet.
+A generated world has plates and crust, continents and oceans, and its plates drift for the configured time.
+Nothing happens yet where plates meet or part: no ridge, trench, or mountain is formed.
 [PLAN.md](PLAN.md) lists what is built and what comes next.
 Until the first tagged release, the API and the datafile format may change without notice.
 

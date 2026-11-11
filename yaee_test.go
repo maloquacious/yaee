@@ -119,6 +119,8 @@ func TestValidateNamesField(t *testing.T) {
 		{"MaxPlateSpeed", func(c *yaee.Config) { c.MaxPlateSpeed = -1 }},
 		{"MaxPlateSpeed", func(c *yaee.Config) { c.MaxPlateSpeed = nan }},
 		{"MaxPlateSpeed", func(c *yaee.Config) { c.MaxPlateSpeed = inf }},
+		{"Duration", func(c *yaee.Config) { c.Duration = 2*yaee.MaxSteps + 1 }},
+		{"Duration", func(c *yaee.Config) { c.Duration = 1; c.TimeStep = 1e-7 }},
 		{"SampleSpacing", func(c *yaee.Config) { c.SampleSpacing = 1e-300 }},
 		{"Duration", func(c *yaee.Config) { c.Duration = -1 }},
 		{"Duration", func(c *yaee.Config) { c.Duration = nan }},
@@ -158,6 +160,7 @@ func TestValidateAcceptsBoundaries(t *testing.T) {
 		func(c *yaee.Config) { c.LandCoverage = 0 },
 		func(c *yaee.Config) { c.LandCoverage = 1 },
 		func(c *yaee.Config) { c.MaxPlateSpeed = 0 },
+		func(c *yaee.Config) { c.Duration = 2 * yaee.MaxSteps },
 		func(c *yaee.Config) {
 			c.RidgeElevation, c.AbyssalElevation, c.TrenchElevation, c.MaxContinentalElevation = -1e-9, -2e-9, -3e-9, 1e-9
 		},
@@ -204,6 +207,7 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 
 func TestGenerateShape(t *testing.T) {
 	cfg := smallConfig(500)
+	cfg.Duration = 0 // the initial world; TestGenerateSimulated moves the plates
 	w := mustGenerate(t, cfg)
 	if w.Config != cfg {
 		t.Errorf("Config = %+v, want %+v", w.Config, cfg)
@@ -319,6 +323,83 @@ func TestGenerateShape(t *testing.T) {
 	}
 	if w.Attribute("no such attribute") != nil {
 		t.Fatal("Attribute returned a value for an unknown name")
+	}
+}
+
+// A world whose plates have moved keeps every attribute in its
+// documented range, and differs from the initial world.
+func TestGenerateSimulated(t *testing.T) {
+	cfg := smallConfig(3000)
+	w := mustGenerate(t, cfg)
+	initial := cfg
+	initial.Duration = 0
+	start := mustGenerate(t, initial)
+	if reflect.DeepEqual(w.Attributes, start.Attributes) {
+		t.Fatal("250 My of simulation left the world as it started")
+	}
+	if !reflect.DeepEqual(w.Positions, start.Positions) || !reflect.DeepEqual(w.Triangles, start.Triangles) {
+		t.Fatal("the simulation changed the samples or the triangles")
+	}
+	still := cfg
+	still.MaxPlateSpeed = 0
+	if rest := mustGenerate(t, still); !reflect.DeepEqual(rest.Attributes, start.Attributes) {
+		t.Fatal("with MaxPlateSpeed 0 the world is not the initial world")
+	}
+	// A shorter last step: 5 My in steps of 2 is not 4 or 6 My.
+	short := cfg
+	short.Duration = 5
+	four, six := short, short
+	four.Duration, six.Duration = 4, 6
+	a, b, c := mustGenerate(t, short), mustGenerate(t, four), mustGenerate(t, six)
+	if reflect.DeepEqual(a.Attributes, b.Attributes) || reflect.DeepEqual(a.Attributes, c.Attributes) {
+		t.Fatal("a Duration of 5 My gave the world of 4 or 6 My")
+	}
+
+	n := w.NumSamples()
+	plate := w.Attribute(yaee.AttrPlate).Int32s
+	crust := w.Attribute(yaee.AttrCrustType).Uint8s
+	thickness := w.Attribute(yaee.AttrThickness).Float64s
+	elevation := w.Attribute(yaee.AttrElevation).Float64s
+	oceanicAge := w.Attribute(yaee.AttrOceanicAge).Float64s
+	ridge := w.Attribute(yaee.AttrRidgeDirection).Float64s
+	orogenyAge := w.Attribute(yaee.AttrOrogenyAge).Float64s
+	orogeny := w.Attribute(yaee.AttrOrogenyType).Uint8s
+	fold := w.Attribute(yaee.AttrFoldDirection).Float64s
+	var land int
+	for i := range n {
+		if plate[i] < 0 || int(plate[i]) >= cfg.Plates {
+			t.Fatalf("sample %d has plate %d", i, plate[i])
+		}
+		if crust[i] != yaee.CrustOceanic && crust[i] != yaee.CrustContinental {
+			t.Fatalf("sample %d has crust type %d", i, crust[i])
+		}
+		if orogeny[i] > yaee.OrogenyHimalayan {
+			t.Fatalf("sample %d has orogeny type %d", i, orogeny[i])
+		}
+		land += int(crust[i])
+		values := []float64{thickness[i], elevation[i], oceanicAge[i], orogenyAge[i]}
+		values = append(values, ridge[3*i:3*i+3]...)
+		values = append(values, fold[3*i:3*i+3]...)
+		for _, v := range values {
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				t.Fatalf("sample %d has a value that is not finite: %v", i, values)
+			}
+		}
+		if z := elevation[i]; z < cfg.TrenchElevation || z > cfg.MaxContinentalElevation {
+			t.Fatalf("sample %d has elevation %v", i, z)
+		}
+		if !(thickness[i] > 0) || oceanicAge[i] < 0 || orogenyAge[i] < 0 {
+			t.Fatalf("sample %d: thickness %v, oceanic age %v, orogeny age %v", i, thickness[i], oceanicAge[i], orogenyAge[i])
+		}
+		if crust[i] == yaee.CrustContinental && (oceanicAge[i] != 0 || ridge[3*i] != 0 || ridge[3*i+1] != 0 || ridge[3*i+2] != 0) {
+			t.Fatalf("continental sample %d has an oceanic age or a ridge direction", i)
+		}
+		if orogeny[i] == yaee.OrogenyNone && orogenyAge[i] != 0 {
+			t.Fatalf("sample %d has an orogeny age without an orogeny", i)
+		}
+	}
+	if land < n/10 || land > n/2 {
+		t.Fatalf("%d of %d samples are continental after 250 My; the world started with 0.3", land, n)
 	}
 }
 

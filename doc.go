@@ -31,10 +31,12 @@
 // The package does not print, read the environment or command-line
 // flags, or exit. Every failure is returned as an error.
 //
-// As of this version the samples, their triangulation, the initial
-// plates, and the initial crust are generated: continents and oceans
-// with every per-sample parameter of the model at its starting value. No
-// plate moves: no tectonics is simulated yet.
+// As of this version the initial plates and crust are generated, and
+// the plates then move as rigid bodies for Config.Duration, carrying
+// their crust. Nothing happens yet where plates meet or part: where they
+// part the gap is filled with new oceanic crust at the ridge elevation,
+// and where they meet one plate's crust replaces the other's. No ridge,
+// trench, or mountain is formed.
 //
 // The tectonic model is that of
 //

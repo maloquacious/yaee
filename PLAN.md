@@ -28,8 +28,9 @@ A default run is an Earth-like world at about 25 km per data point:
 | Time step | 2 My, so 125 steps |
 | Plates at start | 40, with 0.3 land coverage (the paper's test case, §7.4) |
 
-**Time budget:** a default run finishes in under 10 minutes on the development machine.
-That figure is a proposal, not a measurement; revise it after milestone 4, when the first real timings exist.
+**Time budget:** a default run finishes in under 2 minutes on the development machine (Apple M4, 10 processors).
+Revised after milestone 4, which measured 4.4 s for a default run: 1.2 s to build the sphere and the initial world, then at most 50 resamplings of 76 ms each; a step between resamplings costs under a microsecond.
+Milestones 5 to 8 add work to every step and every resampling. The budget allows each of the 125 steps about a second, which is twelve times a resampling today.
 For comparison, the paper reports 1.9 s per step plus 13 s per resampling at 500,000 samples.
 
 ## Decisions
@@ -222,6 +223,8 @@ Measured at full scale (942,059 samples) on the development machine:
 
 Tracked by [#4](https://github.com/maloquacious/yaee/issues/4), with sub-issues #21 and #22.
 
+**Done** in version 0.13.0-alpha. The code is `internal/tectonics`: `Motion`, `Advance`, `Velocity`, `Query`, `Resample`, and the `Simulation` stage.
+
 A rotation axis and speed for each plate. Advancing all plates by a time step. Global resampling (§6, Meshing): for every sample, find the plates that cover it, interpolate crust data from the covering plate, and rebuild the plates from the result. Overlaps and gaps are resolved by placeholder rules, replaced in milestones 5 and 6. The resampling schedule.
 
 Done when:
@@ -231,6 +234,27 @@ Done when:
 - No sample moves faster than the configured maximum speed.
 - After every resampling, every sample belongs to exactly one plate.
 - A full-scale run completes, images show plates drifting, and step and resampling times are recorded. Revise the time budget from these numbers.
+
+What was built, where the paper and the plan left a choice:
+
+- Each plate's axis is a uniform random point of the sphere. The speed of the plate's fastest sample is drawn uniformly from 0 to `MaxPlateSpeed` (v0, default 100 km/My), and the angular speed follows from it, so no sample moves faster than v0.
+- A triangle whose corners are in different plates is divided between them: a point belongs to the plate of its nearest corner (greatest barycentric weight). A plate's data at a point is interpolated from the triangle's corners that are in that plate.
+- Resampling happens when the fastest sample has moved 500 km since the last one, and after the last step. The paper's rule is a count of steps that amounts to 2000 km or more.
+- Interpolation: scalars are blended; vectors are blended, turned with the plate, and projected onto the tangent plane; crust type and orogeny type come from the nearest corner. Each resampling adds an error proportional to the square of the sample spacing.
+- Placeholders: a gap between plates gets new oceanic crust at z_r with age 0, and joins the nearest plate (milestone 5 replaces this). Where plates overlap, continental crust is kept over oceanic, then the lowest-numbered plate (milestone 6 replaces this).
+- After a resampling a plate may be in several pieces or have no samples. A plate whose fastest sample would exceed v0 after gaining samples has its angular speed lowered to the limit.
+- `Duration` 0 gives the initial world. A `Duration` that is not a multiple of `TimeStep` ends with a shorter step. A run may have at most 1,000,000 steps.
+- Plate axes and speeds are not written to the datafile. It holds per-sample data only.
+
+Measured at full scale (942,059 samples, 250 My, 125 steps) on the development machine:
+
+| Measure | Value |
+|---------|-------|
+| `yaee generate` | 4.4 s, 556 MB peak resident memory; 17.6 s with `GOMAXPROCS=1` |
+| One step without a resampling | under 1 µs |
+| One resampling | 76 ms; 381 ms with `GOMAXPROCS=1` |
+| Datafile | 126,236,594 bytes |
+| Runs with `GOMAXPROCS=1` and with the default | Identical datafile bytes |
 
 ### 5. Oceanic crust
 

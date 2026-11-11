@@ -225,8 +225,9 @@ written.
 The Config file is one JSON object. This is the default Config:
 %s
 The same Config gives the same datafile, byte for byte, on the same CPU
-architecture. The default world takes about a second to generate and
-its datafile is about 126 MB.
+architecture. The default world takes about 5 seconds to generate on
+ten processors, and its datafile is about 126 MB. -duration 0 gives the
+initial world, before any plate has moved.
 
 Example:
   yaee generate -seed 42 -out tmp/world.yaee

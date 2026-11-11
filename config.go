@@ -26,6 +26,10 @@ const (
 // MaxPlates is the largest value of Config.Plates.
 const MaxPlates = 1000
 
+// MaxSteps is the largest number of time steps a Config may ask for.
+// See Config.Duration.
+const MaxSteps = 1_000_000
+
 // Config is everything that determines a world. The same Config always
 // generates the same world, and the datafile records the Config that
 // produced it.
@@ -66,17 +70,19 @@ type Config struct {
 	SampleSpacing float64 `json:"sample_spacing_km"`
 
 	// Duration is the span of time simulated.
-	// Unit: My. Range: finite and at least 0. Default: 250.
+	// Unit: My. Range: finite, at least 0, and at most MaxSteps
+	// (1,000,000) times TimeStep. Default: 250.
 	//
-	// As of this version it is validated and recorded but has no effect
-	// on the world.
+	// 0 gives the initial world: plates and crust as they start, before
+	// any plate has moved.
 	Duration float64 `json:"duration_my"`
 
 	// TimeStep is the length of one simulation step.
 	// Unit: My. Range: finite and greater than 0. Default: 2.
 	//
-	// As of this version it is validated and recorded but has no effect
-	// on the world.
+	// The simulation takes the smallest whole number of steps that
+	// covers Duration. If Duration is not a multiple of TimeStep, the
+	// last step is the shorter remainder.
 	TimeStep float64 `json:"time_step_my"`
 
 	// Plates is the number of tectonic plates at the start.
@@ -159,9 +165,6 @@ type Config struct {
 	// Each plate turns about its own axis through the centre of the
 	// sphere. The speed of a plate's fastest point is drawn uniformly
 	// from 0 to this value. 0 gives plates that do not move.
-	//
-	// As of this version it is validated and recorded but has no effect
-	// on the world.
 	MaxPlateSpeed float64 `json:"max_plate_speed_km_per_my"`
 }
 
@@ -230,6 +233,8 @@ func (c Config) Validate() error {
 	}
 	if !positive(c.TimeStep) {
 		invalid("TimeStep", "must be finite and greater than 0, got %v", c.TimeStep)
+	} else if c.Duration > MaxSteps*c.TimeStep && !math.IsInf(c.Duration, 0) {
+		invalid("Duration", "with TimeStep %v it takes more than %d steps, got %v", c.TimeStep, MaxSteps, c.Duration)
 	}
 	if c.Plates < 1 || c.Plates > MaxPlates {
 		invalid("Plates", "must be from 1 to %d, got %d", MaxPlates, c.Plates)

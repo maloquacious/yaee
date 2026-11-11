@@ -23,8 +23,8 @@ import (
 // whatever the number of processors. Worlds generated on different
 // architectures may differ.
 //
-// At the default scale Generate takes about a second and uses about
-// 420 MB of memory. It may run goroutines, all of which have ended when it
+// At the default scale Generate takes about 5 seconds on ten processors
+// and uses about 560 MB of memory. It may run goroutines, all of which have ended when it
 // returns.
 func Generate(ctx context.Context, cfg Config) (*World, error) {
 	if err := cfg.Validate(); err != nil {
@@ -65,7 +65,7 @@ func Generate(ctx context.Context, cfg Config) (*World, error) {
 
 // stages returns the stages of generation, in the order they run.
 func stages() []model.Stage {
-	return []model.Stage{tectonics.Plates{}, tectonics.Crust{}, tectonics.Motion{}}
+	return []model.Stage{tectonics.Plates{}, tectonics.Crust{}, tectonics.Motion{}, tectonics.Simulation{}}
 }
 
 // export copies the working data into a World.

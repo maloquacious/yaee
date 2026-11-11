@@ -56,12 +56,14 @@ type World struct {
 const (
 	// AttrPlate is the number of the tectonic plate the sample belongs
 	// to. Type Int32, 1 component, no unit. Range: 0 to
-	// Config.Plates−1; every number in that range is used by at least
-	// one sample.
+	// Config.Plates−1.
 	//
-	// The samples of one plate form a single connected region: any two
-	// of them are joined by a path of neighbouring samples of the same
-	// plate.
+	// In the initial world (Config.Duration 0) every number in that
+	// range is used by at least one sample, and the samples of one plate
+	// form a single connected region: any two of them are joined by a
+	// path of neighbouring samples of the same plate. Once plates have
+	// moved, neither holds: a plate may be in several pieces, and a
+	// plate that others have covered may have no samples.
 	AttrPlate = "plate"
 
 	// AttrCrustType is the type of the crust (x_C in the paper's
@@ -70,18 +72,20 @@ const (
 	AttrCrustType = "crust_type"
 
 	// AttrThickness is the thickness of the crust (e). Type Float64,
-	// 1 component, unit "km". Range: greater than 0. As of this version
-	// it is 7 for oceanic crust and 35 for continental crust.
+	// 1 component, unit "km". Range: greater than 0. It starts at 7 for
+	// oceanic crust and 35 for continental crust.
 	AttrThickness = "thickness"
 
 	// AttrElevation is the height of the surface above sea level (z).
 	// Type Float64, 1 component, unit "km". Negative below sea level.
 	// Range: Config.TrenchElevation to Config.MaxContinentalElevation.
 	//
-	// As of this version no tectonics is simulated, and the elevation
-	// is that of the initial crust: Config.AbyssalElevation to
+	// As of this version plates move but nothing raises or lowers the
+	// crust, so every elevation is one the initial crust had or lies
+	// between two of them: Config.AbyssalElevation to
 	// Config.RidgeElevation for oceanic crust, and 0.01 to 0.05 of
-	// Config.MaxContinentalElevation for continental crust.
+	// Config.MaxContinentalElevation for continental crust, or between
+	// those ranges within a sample spacing of a coast.
 	AttrElevation = "elevation"
 
 	// AttrOceanicAge is the time since oceanic crust formed at a ridge
