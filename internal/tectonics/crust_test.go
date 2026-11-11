@@ -188,14 +188,14 @@ func TestCrustInitialValues(t *testing.T) {
 	}
 }
 
-// The initial age is the time the paper's dampening takes from the
-// ridge elevation to the abyssal elevation: integrating the dampening
-// for that long must arrive at z_a.
+// The initial age is three time constants of the dampening: integrating
+// the dampening for that long takes crust from the ridge elevation
+// 1 − e⁻³ of the way to the abyssal elevation.
 func TestInitialOceanicAge(t *testing.T) {
 	params := earth()
 	age := InitialOceanicAge(params)
-	if math.Abs(age-202.7) > 0.05 {
-		t.Errorf("InitialOceanicAge = %v, want 202.7", age)
+	if want := 3 * math.Abs(params.AbyssalElevation) / params.OceanicDampening; math.Abs(age-want) > 1e-9 {
+		t.Errorf("InitialOceanicAge = %v, want %v", age, want)
 	}
 	for _, set := range []func(*model.Params){
 		func(*model.Params) {},
@@ -208,20 +208,21 @@ func TestInitialOceanicAge(t *testing.T) {
 		if !(age > 0) || math.IsInf(age, 0) {
 			t.Fatalf("InitialOceanicAge(%+v) = %v", params, age)
 		}
-		// dz/dt = −(1 − z/z_t) · ε_o (§4.5), by small Euler steps.
+		// dz/dt = −(1 − z/z_a) · ε_o, by small Euler steps.
 		z := params.RidgeElevation
 		const steps = 200000
 		dt := age / steps
 		for range steps {
-			z -= (1 - z/params.TrenchElevation) * params.OceanicDampening * dt
+			z -= (1 - z/params.AbyssalElevation) * params.OceanicDampening * dt
 		}
-		if math.Abs(z-params.AbyssalElevation) > 1e-4 {
-			t.Errorf("dampening for %v My takes z_r = %v to %v, want z_a = %v", age, params.RidgeElevation, z, params.AbyssalElevation)
+		want := params.AbyssalElevation + (params.RidgeElevation-params.AbyssalElevation)*math.Exp(-3)
+		if math.Abs(z-want) > 1e-4 {
+			t.Errorf("dampening for %v My takes z_r = %v to %v, want %v", age, params.RidgeElevation, z, want)
 		}
 	}
 
 	// Twice the dampening, half the time; none, no age.
-	params.OceanicDampening = 0.08
+	params.OceanicDampening *= 2
 	if got := InitialOceanicAge(params); math.Abs(got-age/2) > 1e-9 {
 		t.Errorf("with twice the dampening InitialOceanicAge = %v, want %v", got, age/2)
 	}

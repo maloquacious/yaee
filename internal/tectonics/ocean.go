@@ -15,34 +15,44 @@ import (
 // (§4.5, oceanic dampening). For every sample of oceanic crust:
 //
 //   - the oceanic age a_o increases by dt;
-//   - the elevation z becomes z − (1 − z/z_t) · ε_o · dt, with z_t the
-//     trench elevation and ε_o the parameter OceanicDampening.
+//   - if z′ > z_a, the elevation z falls by (1 − z′/z_a) · ε_o · dt,
+//     with z′ = z + T the elevation without the sample's trench (T is
+//     World.Trench), z_a the abyssal elevation, and ε_o the parameter
+//     OceanicDampening.
 //
-// The elevation formula is the paper's, as written. It is the explicit
-// Euler step of dz/dt = −(1 − z/z_t) · ε_o, whose solution is
+// It is the explicit Euler step of dz′/dt = −(1 − z′/z_a) · ε_o, whose
+// solution is
 //
-//	z(t) = z_t + (z(0) − z_t) · exp(−ε_o · t / |z_t|).
+//	z′(t) = z_a + (z′(0) − z_a) · exp(−ε_o · t / |z_a|).
 //
-// The step moves z toward z_t by the fraction ε_o · dt / |z_t| of its
-// distance from z_t: 0.008 with the defaults. One departure: where that
-// fraction is greater than 1 it is taken as 1, so that z lands on z_t
-// and does not pass it. While the fraction is at most 0.5, the result
-// after t My in steps of dt differs from the solution by less than
-// (z(0) − z_t) · t · ε_o² · dt / z_t²; for 250 My of the default steps
-// on crust that starts at the ridge elevation the difference is
-// 0.013 km.
+// The step moves z′ toward z_a by the fraction ε_o · dt / |z_a| of its
+// distance from z_a. Where that fraction is greater than 1 it is taken
+// as 1, so that z′ lands on z_a and does not pass it. While the
+// fraction is at most 0.5, the result after t My in steps of dt differs
+// from the solution by less than (z′(0) − z_a) · t · ε_o² · dt / z_a².
 //
-// The elevation approaches z_t, not the abyssal elevation z_a: z_a is
-// only where crust formed at z_r is after about 200 My.
+// Departure from the paper, which prints 1 − z/z_t, with z_t the trench
+// elevation: its crust sinks toward the depth of the trenches for as
+// long as it lives, so that old ocean floor is as deep as a trench and
+// z_a is passed after 200 My. Ours settles at the abyssal plain, as
+// ocean floor does: measured depth against age fits
+// d(t) = 5.651 − 2.473 · exp(−0.0278 · t) km for crust older than 20 My
+// (Stein and Stein, "A model for the global variation in oceanic depth
+// and heat flow with lithospheric age", Nature 359, 1992), which is this
+// formula with a time constant |z_a|/ε_o of 36 My. Only a trench is
+// below z_a.
 //
-// Continental crust is not changed. dt must be at least 0.
+// Crust at or below z_a without its trench, and continental crust, are
+// not changed. dt must be at least 0.
 func AgeOcean(ctx context.Context, w *model.World, dt float64) error {
-	keep := max(0, 1-w.OceanicDampening*dt/math.Abs(w.TrenchElevation))
+	keep := max(0, 1-w.OceanicDampening*dt/math.Abs(w.AbyssalElevation))
 	return model.ParallelRange(ctx, len(w.CrustType), func(lo, hi int) {
 		for i := lo; i < hi; i++ {
 			if w.CrustType[i] == model.Oceanic {
 				w.OceanicAge[i] += dt
-				w.Elevation[i] = w.TrenchElevation + (w.Elevation[i]-w.TrenchElevation)*keep
+				if whole := w.Elevation[i] + w.Trench[i]; whole > w.AbyssalElevation {
+					w.Elevation[i] -= (whole - w.AbyssalElevation) * (1 - keep)
+				}
 			}
 		}
 	})
@@ -52,15 +62,16 @@ func AgeOcean(ctx context.Context, w *model.World, dt float64) error {
 // as a function of the age in My of the crust: the elevation in km of
 // oceanic crust that formed at the ridge elevation z_r that long ago,
 //
-//	z_Γ(a) = z_t + (z_r − z_t) · exp(−ε_o · a / |z_t|).
+//	z_Γ(a) = z_a + (z_r − z_a) · exp(−ε_o · a / |z_a|).
 //
-// It is z_r at age 0, on the ridge. The paper shows the profile's shape,
-// highest at the ridge and falling to either side, and gives no formula.
-// This one is the solution of the paper's own dampening (see AgeOcean),
-// so new crust has the elevation it would have had if it had formed at
-// the ridge and been dampened ever since.
+// It is z_r at age 0, on the ridge, and falls toward the abyssal
+// elevation z_a. The paper shows the profile's shape, highest at the
+// ridge and falling to either side, and gives no formula. This one is
+// the solution of the dampening (see AgeOcean), so new crust has the
+// elevation it would have had if it had formed at the ridge and been
+// dampened ever since.
 func RidgeProfile(p model.Params, age float64) float64 {
-	return p.TrenchElevation + (p.RidgeElevation-p.TrenchElevation)*math.Exp(-p.OceanicDampening*age/math.Abs(p.TrenchElevation))
+	return p.AbyssalElevation + (p.RidgeElevation-p.AbyssalElevation)*math.Exp(-p.OceanicDampening*age/math.Abs(p.AbyssalElevation))
 }
 
 // fillGaps generates oceanic crust (§4.3) for every sample of next that

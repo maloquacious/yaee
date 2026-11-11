@@ -13,7 +13,11 @@ import (
 	"github.com/maloquacious/yaee/internal/sphere"
 )
 
-// earth returns the default parameters of the stages in this package.
+// earth returns the parameters that the tests of this package use: the
+// constants of the paper's Table 3, with no rifting and no elevation
+// noise. The tests state distances and elevations that follow from
+// these values. They are not the defaults of yaee.Config, which differ
+// in six constants.
 func earth() model.Params {
 	return model.Params{
 		Radius:               6370,

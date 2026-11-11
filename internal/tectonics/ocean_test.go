@@ -13,15 +13,19 @@ import (
 )
 
 // Dampening follows its closed-form solution,
-// z(t) = z_t + (z(0) − z_t) · exp(−ε_o · t / |z_t|), within the error
-// AgeOcean states, and never passes z_t. Continental crust is left
-// alone.
+// z′(t) = z_a + (z′(0) − z_a) · exp(−ε_o · t / |z_a|) for the elevation
+// z′ without the trench, within the error AgeOcean states, and never
+// passes z_a. Crust at or below z_a, and continental crust, are left
+// alone, and no trench changes.
 func TestAgeOcean(t *testing.T) {
 	params := earth()
 	w := newWorld(t, 200, params)
-	start := []float64{params.RidgeElevation, 0, 2.5, -6, -9.99, params.TrenchElevation, -12}
+	za, eps := params.AbyssalElevation, params.OceanicDampening
+	start := []float64{params.RidgeElevation, 0, 2.5, -5.9, za, -9.99, params.TrenchElevation}
+	trench := []float64{0, 0, 0, 0, 0, 1.5, 3}
 	for i := range w.Elevation {
 		w.Elevation[i] = start[i%len(start)]
+		w.Trench[i] = trench[i%len(trench)]
 		w.OceanicAge[i] = float64(i)
 		if i%3 == 0 {
 			w.CrustType[i] = model.Continental
@@ -32,7 +36,6 @@ func TestAgeOcean(t *testing.T) {
 		steps = 125
 		dt    = 2.0
 	)
-	zt, eps := params.TrenchElevation, params.OceanicDampening
 	var worst float64
 	for s := 1; s <= steps; s++ {
 		if err := AgeOcean(t.Context(), w, dt); err != nil {
@@ -40,7 +43,10 @@ func TestAgeOcean(t *testing.T) {
 		}
 		elapsed := float64(s) * dt
 		for i, z := range w.Elevation {
-			z0 := start[i%len(start)]
+			z0, tr := start[i%len(start)], trench[i%len(trench)]
+			if w.Trench[i] != tr {
+				t.Fatalf("sample %d: the trench changed from %v to %v", i, tr, w.Trench[i])
+			}
 			if w.CrustType[i] == model.Continental {
 				if z != z0 || w.OceanicAge[i] != 0 {
 					t.Fatalf("continental sample %d changed: elevation %v, oceanic age %v", i, z, w.OceanicAge[i])
@@ -50,37 +56,41 @@ func TestAgeOcean(t *testing.T) {
 			if got, want := w.OceanicAge[i], float64(i)+elapsed; math.Abs(got-want) > 1e-9 {
 				t.Fatalf("sample %d: oceanic age %v after %v My, want %v", i, got, elapsed, want)
 			}
-			want := zt + (z0-zt)*math.Exp(-eps*elapsed/math.Abs(zt))
-			bound := math.Abs(z0-zt)*elapsed*eps*eps*dt/(zt*zt) + 1e-12
+			whole0 := z0 + tr
+			if whole0 <= za {
+				if z != z0 {
+					t.Fatalf("sample %d, at %v with a trench of %v, changed to %v", i, z0, tr, z)
+				}
+				continue
+			}
+			want := za + (whole0-za)*math.Exp(-eps*elapsed/math.Abs(za)) - tr
+			bound := (whole0-za)*elapsed*eps*eps*dt/(za*za) + 1e-12
 			if diff := math.Abs(z - want); diff > bound {
 				t.Fatalf("sample %d after %v My: elevation %v, closed form %v, off by %v, bound %v", i, elapsed, z, want, diff, bound)
 			} else if z0 == params.RidgeElevation {
 				worst = max(worst, diff)
 			}
-			// It never passes z_t, from above or from below.
-			if (z0 >= zt && z < zt) || (z0 <= zt && z > zt) {
-				t.Fatalf("sample %d passed the trench elevation: from %v to %v", i, z0, z)
+			if z+tr < za {
+				t.Fatalf("sample %d passed the abyssal elevation: from %v to %v", i, whole0, z+tr)
 			}
 		}
 	}
 	t.Logf("crust from the ridge elevation: greatest difference from the closed form %.4f km", worst)
-	if worst > 0.014 {
-		t.Errorf("crust from the ridge elevation is off the closed form by %v km, want at most 0.014", worst)
-	}
-	// After 250 My crust from the ridge is near the abyssal elevation
-	// and still sinking.
-	if z := w.Elevation[7]; start[7%len(start)] != params.RidgeElevation || z > -6.5 || z < -7 {
-		t.Errorf("crust from the ridge elevation is at %v km after 250 My, want about -6.7", z)
+	// After 250 My crust from the ridge is at the abyssal elevation,
+	// within a thousandth of the distance it started from it.
+	if z := w.Elevation[7]; start[7%len(start)] != params.RidgeElevation || z < za || z > za+(params.RidgeElevation-za)*math.Exp(-eps*250/math.Abs(za))+0.02 {
+		t.Errorf("crust from the ridge elevation is at %v km after 250 My, want just above %v", z, za)
 	}
 
-	// A step too long for the formula lands on z_t; no dampening leaves
-	// the elevation alone.
-	w.Elevation[1], w.Elevation[2] = -1, -11
+	// A step too long for the formula lands on z_a, or on z_a less the
+	// trench; no dampening leaves the elevation alone.
+	w.Elevation[1], w.Trench[1] = -1, 0
+	w.Elevation[2], w.Trench[2] = -3, 2
 	if err := AgeOcean(t.Context(), w, 1000); err != nil {
 		t.Fatal(err)
 	}
-	if w.Elevation[1] != zt || w.Elevation[2] != zt {
-		t.Errorf("a 1000 My step left elevations %v and %v, want %v", w.Elevation[1], w.Elevation[2], zt)
+	if w.Elevation[1] != za || math.Abs(w.Elevation[2]-(za-2)) > 1e-12 {
+		t.Errorf("a 1000 My step left elevations %v and %v, want %v and %v", w.Elevation[1], w.Elevation[2], za, za-2)
 	}
 	w.OceanicDampening = 0
 	w.Elevation[1] = -1
@@ -98,18 +108,31 @@ func TestRidgeProfile(t *testing.T) {
 	if z := RidgeProfile(params, 0); z != params.RidgeElevation {
 		t.Errorf("RidgeProfile at age 0 = %v, want the ridge elevation %v", z, params.RidgeElevation)
 	}
-	// It reaches the abyssal elevation at the initial ocean's age, and
-	// falls toward the trench elevation without reaching it.
-	if z := RidgeProfile(params, InitialOceanicAge(params)); math.Abs(z-params.AbyssalElevation) > 1e-9 {
-		t.Errorf("RidgeProfile at the initial age = %v, want %v", z, params.AbyssalElevation)
+	// At the initial ocean's age it has made 1 − e⁻³ of the descent to
+	// the abyssal elevation, and it falls toward that elevation without
+	// reaching it.
+	want := params.AbyssalElevation + (params.RidgeElevation-params.AbyssalElevation)*math.Exp(-3)
+	if z := RidgeProfile(params, InitialOceanicAge(params)); math.Abs(z-want) > 1e-9 {
+		t.Errorf("RidgeProfile at the initial age = %v, want %v", z, want)
 	}
 	prev := params.RidgeElevation
-	for age := 1.0; age < 5000; age *= 1.5 {
+	for age := 1.0; age < 1000; age *= 1.5 {
 		z := RidgeProfile(params, age)
-		if !(z < prev) || z < params.TrenchElevation {
+		if !(z < prev) || z < params.AbyssalElevation {
 			t.Fatalf("RidgeProfile(%v) = %v after %v", age, z, prev)
 		}
 		prev = z
+	}
+	// It is what AgeOcean makes of crust from the ridge.
+	w := newWorld(t, 50, params)
+	w.Elevation[0] = params.RidgeElevation
+	for range 400 {
+		if err := AgeOcean(t.Context(), w, 0.1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if z, want := w.Elevation[0], RidgeProfile(params, 40); math.Abs(z-want) > 0.01 {
+		t.Errorf("crust from the ridge is at %v after 40 My of dampening, RidgeProfile(40) = %v", z, want)
 	}
 	params.OceanicDampening = 0
 	if z := RidgeProfile(params, 100); z != params.RidgeElevation {

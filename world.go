@@ -84,10 +84,14 @@ const (
 	// Type Float64, 1 component, unit "km". Negative below sea level.
 	// Range: Config.TrenchElevation to Config.MaxContinentalElevation.
 	//
-	// Oceanic crust sinks toward Config.TrenchElevation as it ages and
+	// Oceanic crust sinks toward Config.AbyssalElevation as it ages and
 	// is at Config.TrenchElevation in a trench at a subduction front.
 	// Crust behind a subduction front is raised, and land is eroded
-	// toward 0. Oceanic crust may be above 0 where it has been raised.
+	// toward 0. After the simulation, noise of up to
+	// Config.ElevationNoiseAmplitude is added. Oceanic crust may be
+	// above 0 where it has been raised, and continental crust below 0
+	// where the noise has lowered it: do not derive the crust type from
+	// the sign of the elevation.
 	AttrElevation = "elevation"
 
 	// AttrOceanicAge is the time since oceanic crust formed at a ridge

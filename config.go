@@ -125,19 +125,27 @@ type Config struct {
 	LandCoverage float64 `json:"land_coverage"`
 
 	// The four elevations below are constants of the model, from the
-	// paper's Table 3. Sea level is 0, and they must satisfy
+	// paper's Table 3 except where a field says otherwise. Sea level is
+	// 0, and they must satisfy
 	//
 	//	TrenchElevation < AbyssalElevation < RidgeElevation < 0 < MaxContinentalElevation.
 
 	// RidgeElevation is the highest elevation of oceanic crust: that of
 	// a mid-ocean ridge (z_r).
 	// Unit: km. Range: finite, less than 0, greater than
-	// AbyssalElevation. Default: -1.
+	// AbyssalElevation. Default: -2.5.
+	//
+	// The paper's Table 3 has −1. The default is the depth of the crest
+	// of Earth's mid-ocean ridges; with −1 the young crust beside every
+	// ridge forms a third peak in the distribution of elevation, between
+	// the ocean floor and the land.
 	//
 	// The initial ocean floor is at this elevation at the coast.
 	RidgeElevation float64 `json:"ridge_elevation_km"`
 
-	// AbyssalElevation is the elevation of the abyssal plains (z_a).
+	// AbyssalElevation is the elevation of the abyssal plains (z_a):
+	// the elevation that oceanic crust sinks toward as it ages, and
+	// below which only a trench lies.
 	// Unit: km. Range: finite, less than RidgeElevation, greater than
 	// TrenchElevation. Default: -6.
 	//
@@ -172,32 +180,46 @@ type Config struct {
 	// sinks as it ages (the oceanic elevation damping ε_o of the paper's
 	// Table 3).
 	// Unit: km/My, which equals mm/y. Range: finite and at least 0.
-	// Default: 0.04.
+	// Default: 0.17.
 	//
 	// In each time step of length δt My, the elevation z of every sample
-	// of oceanic crust becomes
+	// of oceanic crust above AbyssalElevation becomes
 	//
-	//	z − (1 − z/TrenchElevation) · OceanicDampening · δt
+	//	z − (1 − z/AbyssalElevation) · OceanicDampening · δt
 	//
-	// so oceanic crust sinks toward TrenchElevation and never passes
+	// so oceanic crust sinks toward AbyssalElevation and never passes
 	// it: after t My, crust that formed at RidgeElevation is near
 	//
-	//	TrenchElevation + (RidgeElevation − TrenchElevation) · exp(−OceanicDampening · t / |TrenchElevation|)
+	//	AbyssalElevation + (RidgeElevation − AbyssalElevation) · exp(−OceanicDampening · t / |AbyssalElevation|)
 	//
-	// which with the defaults is −6 km after 203 My. If
-	// OceanicDampening · δt is greater than |TrenchElevation|, a step
-	// puts the crust at TrenchElevation exactly. 0 gives oceanic crust
+	// which with the defaults is −4.5 km after 30 My and −5.8 km after
+	// 100 My. A trench is measured from the elevation this gives. If
+	// OceanicDampening · δt is greater than |AbyssalElevation|, a step
+	// puts the crust at AbyssalElevation exactly. 0 gives oceanic crust
 	// that does not sink.
+	//
+	// The paper's Table 3 has 0.04, and its formula has TrenchElevation
+	// where this one has AbyssalElevation, so that its ocean floor sinks
+	// toward the depth of a trench for as long as it lives. With them
+	// half of the default world's ocean floor is above −1.4 km. The
+	// default gives the time constant |AbyssalElevation| /
+	// OceanicDampening = 35 My; the depth of Earth's ocean floor against
+	// its age fits 36 My (Stein and Stein, Nature 359, 1992).
 	OceanicDampening float64 `json:"oceanic_dampening_km_per_my"`
 
 	// SubductionDistance is how far behind a subduction front the
 	// overriding plate is raised (the subduction distance r_s of the
 	// paper's Table 3).
-	// Unit: km. Range: finite and at least 0. Default: 1800.
+	// Unit: km. Range: finite and at least 0. Default: 600.
 	//
 	// Uplift is 0 at the front, greatest at SubductionDistance / 6
 	// behind it, and 0 again at SubductionDistance and beyond. 0 gives
 	// no uplift.
+	//
+	// The paper's Table 3 has 1800, with which a front raises land as
+	// far inland as most continents reach, and nearly all the land of
+	// the default world is a mountain range. 600 is about the width of
+	// the Andes with their plateau.
 	SubductionDistance float64 `json:"subduction_distance_km"`
 
 	// SubductionUplift is the base rate at which subduction raises the
@@ -221,7 +243,7 @@ type Config struct {
 	// MaxContinentalElevation is worn down (the continental erosion ε_c
 	// of the paper's Table 3).
 	// Unit: km/My, which equals mm/y. Range: finite and at least 0.
-	// Default: 0.03.
+	// Default: 0.1.
 	//
 	// In each time step of length δt My, the elevation z of every sample
 	// of continental crust above sea level becomes
@@ -229,6 +251,13 @@ type Config struct {
 	//	z − (z / MaxContinentalElevation) · ContinentalErosion · δt
 	//
 	// and not less than 0. 0 gives land that is not eroded.
+	//
+	// Land that nothing raises falls to 1/e of its elevation in
+	// MaxContinentalElevation / ContinentalErosion My: 100 My with the
+	// defaults. The paper's Table 3 has 0.03, which gives 333 My, longer
+	// than the default Duration: no mountain range is worn down within a
+	// run, and the land only rises. 100 My is of the order in which
+	// Earth's old ranges have been worn down.
 	ContinentalErosion float64 `json:"continental_erosion_km_per_my"`
 
 	// SedimentAccretion is the rate at which an oceanic trench that is
@@ -254,7 +283,7 @@ type Config struct {
 	// CollisionDistance is the greatest distance from a collision at
 	// which land is raised (the collision distance r_c of the paper's
 	// Table 3).
-	// Unit: km. Range: finite and at least 0. Default: 4200.
+	// Unit: km. Range: finite and at least 0. Default: 1000.
 	//
 	// The distance for one collision is CollisionDistance ·
 	// √((v / MaxPlateSpeed) · (a / a₀)), and at most CollisionDistance,
@@ -262,18 +291,29 @@ type Config struct {
 	// in km² of the continent that changes plates, and a₀ the area of
 	// the sphere divided by Plates. 0 gives collisions that raise
 	// nothing.
+	//
+	// The paper's Table 3 has 4200, with which the collision of two
+	// continents raises both from coast to coast. 1000 is of the order
+	// of the width of the Himalaya with the Tibetan plateau.
 	CollisionDistance float64 `json:"collision_distance_km"`
 
 	// CollisionCoefficient is the rise at the suture of a collision per
 	// km² of the continent that changes plates (the collision
 	// coefficient Δ_c of the paper's Table 3).
 	// Unit: 1/km (km of rise per km² of area). Range: finite and at
-	// least 0. Default: 1.3e-5.
+	// least 0. Default: 5e-7.
 	//
 	// The rise at the suture is s = CollisionCoefficient · a, limited to
 	// MaxContinentalElevation · (1 − exp(−s / MaxContinentalElevation)).
 	// It falls to 0 at the distance that CollisionDistance gives. 0 gives
 	// collisions that raise nothing.
+	//
+	// The paper's Table 3 has 1.3e-5, with which a continent of a million
+	// km² rises 13 km at the suture before the limit, and one the size of
+	// India 57 km: every collision of the default world raises its suture
+	// to MaxContinentalElevation. With 5e-7 a continent the size of India
+	// (4.4 million km²) rises 2 km, and only the largest reach half of
+	// MaxContinentalElevation.
 	CollisionCoefficient float64 `json:"collision_coefficient_per_km"`
 
 	// RiftingRate is how often a plate breaks into two to four plates
@@ -287,19 +327,50 @@ type Config struct {
 	// at all if a is less than a₀ or MaxPlateSpeed is 0. 0 gives plates
 	// that never rift.
 	RiftingRate float64 `json:"rifting_rate_per_my"`
+
+	// ElevationNoiseAmplitude is the greatest change that the
+	// low-frequency noise makes to an elevation (the paper's §4.5: "we
+	// apply low frequency coherent noise to obtain more realistic
+	// variations over the planet"; it gives no value).
+	// Unit: km. Range: finite and at least 0. Default: 0.5.
+	//
+	// After the last step of the simulation, a value of smooth noise is
+	// added to the elevation of every sample, of either crust type. The
+	// values lie from −ElevationNoiseAmplitude to
+	// ElevationNoiseAmplitude, with a mean near 0 and a standard
+	// deviation of about 0.26 times it. The result is limited to the
+	// range TrenchElevation to MaxContinentalElevation. The noise lowers
+	// some continental crust below sea level. 0 gives no noise, and
+	// there is none when Duration is 0.
+	ElevationNoiseAmplitude float64 `json:"elevation_noise_amplitude_km"`
+
+	// ElevationNoiseFeatureSize is the distance across the largest
+	// features of that noise: its values at two points this far apart
+	// are unrelated. Features down to a quarter of this size are added
+	// at lower strength.
+	// Unit: km. Range: finite and greater than 0. Default: 2000.
+	//
+	// It has no effect when ElevationNoiseAmplitude is 0.
+	ElevationNoiseFeatureSize float64 `json:"elevation_noise_feature_size_km"`
 }
 
 // DefaultConfig returns the configuration of an Earth-like world at
 // about 25 km per sample: Seed 0, Radius 6370 km, SampleSpacing 25 km,
 // Duration 250 My, TimeStep 2 My, Plates 40, PlateWarpAmplitude 1500 km,
-// PlateWarpFeatureSize 2500 km, LandCoverage 0.3, RidgeElevation −1 km,
+// PlateWarpFeatureSize 2500 km, LandCoverage 0.3, RidgeElevation −2.5 km,
 // AbyssalElevation −6 km, TrenchElevation −10 km,
 // MaxContinentalElevation 10 km, MaxPlateSpeed 100 km/My,
-// OceanicDampening 0.04 km/My, SubductionDistance 1800 km,
-// SubductionUplift 0.6 km/My, ContinentalErosion 0.03 km/My,
+// OceanicDampening 0.17 km/My, SubductionDistance 600 km,
+// SubductionUplift 0.6 km/My, ContinentalErosion 0.1 km/My,
 // SedimentAccretion 0.3 km/My, CollisionPenetration 300 km,
-// CollisionDistance 4200 km, CollisionCoefficient 1.3e-5 per km, and
-// RiftingRate 0.004 per My. It passes Validate.
+// CollisionDistance 1000 km, CollisionCoefficient 5e-7 per km,
+// RiftingRate 0.004 per My, ElevationNoiseAmplitude 0.5 km, and
+// ElevationNoiseFeatureSize 2000 km. It passes Validate.
+//
+// Six of these differ from the paper's Table 3, which has RidgeElevation
+// −1, OceanicDampening 0.04, SubductionDistance 1800, ContinentalErosion
+// 0.03, CollisionDistance 4200, and CollisionCoefficient 1.3e-5. Each
+// field's documentation says why.
 func DefaultConfig() Config {
 	return Config{
 		Seed:                 0,
@@ -312,25 +383,28 @@ func DefaultConfig() Config {
 		PlateWarpFeatureSize: 2500,
 
 		LandCoverage:            0.3,
-		RidgeElevation:          -1,
+		RidgeElevation:          -2.5,
 		AbyssalElevation:        -6,
 		TrenchElevation:         -10,
 		MaxContinentalElevation: 10,
 
 		MaxPlateSpeed: 100,
 
-		OceanicDampening: 0.04,
+		OceanicDampening: 0.17,
 
-		SubductionDistance: 1800,
+		SubductionDistance: 600,
 		SubductionUplift:   0.6,
-		ContinentalErosion: 0.03,
+		ContinentalErosion: 0.1,
 		SedimentAccretion:  0.3,
 
 		CollisionPenetration: 300,
-		CollisionDistance:    4200,
-		CollisionCoefficient: 1.3e-5,
+		CollisionDistance:    1000,
+		CollisionCoefficient: 5e-7,
 
 		RiftingRate: 0.004,
+
+		ElevationNoiseAmplitude:   0.5,
+		ElevationNoiseFeatureSize: 2000,
 	}
 }
 
@@ -422,10 +496,14 @@ func (c Config) Validate() error {
 		{"CollisionDistance", c.CollisionDistance},
 		{"CollisionCoefficient", c.CollisionCoefficient},
 		{"RiftingRate", c.RiftingRate},
+		{"ElevationNoiseAmplitude", c.ElevationNoiseAmplitude},
 	} {
 		if !(f.value >= 0) || math.IsInf(f.value, 0) {
 			invalid(f.name, "must be finite and at least 0, got %v", f.value)
 		}
+	}
+	if !positive(c.ElevationNoiseFeatureSize) {
+		invalid("ElevationNoiseFeatureSize", "must be finite and greater than 0, got %v", c.ElevationNoiseFeatureSize)
 	}
 	return errors.Join(errs...)
 }

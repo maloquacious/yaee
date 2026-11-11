@@ -31,6 +31,7 @@ A default run is an Earth-like world at about 25 km per data point:
 **Time budget:** a default run finishes in under 2 minutes on the development machine (Apple M4, 10 processors).
 Revised after milestone 4, which measured 4.4 s for a default run: 1.2 s to build the sphere and the initial world, then at most 50 resamplings of 76 ms each; a step between resamplings costs under a microsecond.
 Milestone 5 brought a default run to 6.3 s.
+Milestone 9 measured 36 s for the tuned default run.
 Milestones 6 to 8 add work to every step and every resampling. The budget allows each of the 125 steps about a second, which is twelve times a resampling today.
 For comparison, the paper reports 1.9 s per step plus 13 s per resampling at 500,000 samples.
 
@@ -73,6 +74,7 @@ Each is decided in the milestone shown, written up in the code comment, and adde
 | Whether the area ratio is inside the square root in the collision radius law (§4.2) | 7 |
 | λ0, its time window, and the transfer function f(x_P) for rifting (§4.4) | 8 |
 | What happens to a plate that is entirely consumed | 8 |
+| The low-frequency noise on elevation, its size, and when it is applied (§4.5) | 9 |
 
 ## Design
 
@@ -456,6 +458,34 @@ Low-frequency noise (§4.5). Tuning `DefaultConfig` so that a default run looks 
 The open decision on relief is settled before this milestone closes.
 
 9.3 ([#31](https://github.com/maloquacious/yaee/issues/31)) is **done** in version 0.19.0-alpha: `yaee stats -in file` prints measurements of a datafile as JSON, and `yaee help stats` gives every member with its unit. The code is `internal/stats`. Beyond the issue's list it reports land that is oceanic crust, elevation by crust type with quantiles, continents and landmasses (connected regions whatever their plates), and the share of each orogeny type; tuning needs them. Fractions are of the sphere's area, not of the sample count.
+
+9.1 ([#29](https://github.com/maloquacious/yaee/issues/29)) is **done** in version 0.20.0-alpha. The paper's constants gave a world whose continental crust had a median elevation of 7.4 km and whose ocean floor had a median of −1.4 km. What changed:
+
+- **Oceanic dampening sinks crust toward `AbyssalElevation`, not `TrenchElevation`** (a departure from §4.5, documented on `tectonics.AgeOcean`). Only a trench is below the abyssal plain. The initial ocean is 3 × |z_a| / ε_o old (105.9 My by default), which only sets which plate subducts.
+- **Six defaults differ from the paper's Table 3**: `RidgeElevation` −2.5 (paper −1), `OceanicDampening` 0.17 (0.04), `SubductionDistance` 600 (1800), `ContinentalErosion` 0.1 (0.03), `CollisionDistance` 1000 (4200), `CollisionCoefficient` 5e-7 (1.3e-5). Each field's doc comment gives the reason. The formulas of §4.1, §4.2, and the erosion of §4.5 are unchanged.
+- **Elevation noise** (§4.5, last sentence) is a stage of its own, `tectonics.ElevationNoise`, applied once after the last step, to both crust types: `ElevationNoiseAmplitude` 0.5 km, `ElevationNoiseFeatureSize` 2000 km, three octaves. Applied every step it would grow with the number of steps. It puts 0.6% to 2% of the sphere's area under water as continental crust below sea level; an amplitude of 1 km flooded 3.5% and put a sea at the centre of every continent.
+- `LandCoverage` stays 0.3. Subduction and collisions consume continental crust, so less than 0.3 remains.
+- `tectonics` tests keep the paper's constants (`earth()`), because they state distances and elevations that follow from them.
+
+Stated ranges for a default run, with the measurements of seeds 1 to 5 at full scale (`yaee stats`):
+
+| Statistic | Range | Measured |
+|-----------|-------|----------|
+| `land_fraction` | 0.20 to 0.30 | 0.240 to 0.256 |
+| `continental_fraction` | 0.22 to 0.30 | 0.255 to 0.265 |
+| `oceanic_land_fraction` | 0 to 0.01 | 0.000 |
+| `continental_elevation_km` p50 | 0.3 to 1.0 | 0.45 to 0.71 |
+| `continental_elevation_km` p90 | 1.2 to 2.6 | 1.38 to 2.35 |
+| `elevation_km` max | at most `MaxContinentalElevation` (10) | 4.3 to 6.3 |
+| `oceanic_elevation_km` p50 | −5.5 to −4.0 | −5.1 to −4.4 |
+| `elevation_km` min | at least `TrenchElevation` (−10) | −9.5 to −9.4 |
+| `plates.count` | 30 to 70 | 46 to 49 |
+
+For comparison, Earth's land is 0.29 of its surface, with a median elevation near 0.45 km, and its ocean floor has a median depth near 4 km.
+The histogram of elevation has two peaks, the ocean floor from −6 to −4 km and the land from 0 to 0.5 km, with nearly nothing from −2 to −0.5 km.
+`TestDefaultIsEarthLike` checks wider ranges at 100 km per sample for the same five seeds; it is skipped under `-short`.
+
+9.2 ([#30](https://github.com/maloquacious/yaee/issues/30)) is **done**: the tuned default run takes 36 s and 807 MB of peak resident memory on the development machine, within the budget, so nothing was changed for speed. Per step: moving the plates and finding who overrides whom 50 ms, subduction fronts 41 ms, everything else 12 ms. Per resampling (71 in the run): resampling 145 ms, rebuilding the subduction state 123 ms, collisions 28 ms. `yaee generate` has `-cpuprofile` and `-memprofile`.
 
 Done when:
 

@@ -54,6 +54,9 @@ type Params struct {
 	CollisionCoefficient float64 // per km; Δ_c
 
 	RiftingRate float64 // per My; λ_0 of §4.4
+
+	ElevationNoiseAmplitude   float64 // km; see tectonics.ElevationNoise
+	ElevationNoiseFeatureSize float64 // km
 }
 
 // Values of World.CrustType.

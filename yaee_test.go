@@ -43,11 +43,11 @@ func TestDefaultConfig(t *testing.T) {
 	want := yaee.Config{
 		Seed: 0, Radius: 6370, SampleSpacing: 25, Duration: 250, TimeStep: 2,
 		Plates: 40, PlateWarpAmplitude: 1500, PlateWarpFeatureSize: 2500,
-		LandCoverage: 0.3, RidgeElevation: -1, AbyssalElevation: -6, TrenchElevation: -10, MaxContinentalElevation: 10,
-		MaxPlateSpeed: 100, OceanicDampening: 0.04,
-		SubductionDistance: 1800, SubductionUplift: 0.6, ContinentalErosion: 0.03, SedimentAccretion: 0.3,
-		CollisionPenetration: 300, CollisionDistance: 4200, CollisionCoefficient: 1.3e-5,
-		RiftingRate: 0.004,
+		LandCoverage: 0.3, RidgeElevation: -2.5, AbyssalElevation: -6, TrenchElevation: -10, MaxContinentalElevation: 10,
+		MaxPlateSpeed: 100, OceanicDampening: 0.17,
+		SubductionDistance: 600, SubductionUplift: 0.6, ContinentalErosion: 0.1, SedimentAccretion: 0.3,
+		CollisionPenetration: 300, CollisionDistance: 1000, CollisionCoefficient: 5e-7,
+		RiftingRate: 0.004, ElevationNoiseAmplitude: 0.5, ElevationNoiseFeatureSize: 2000,
 	}
 	if cfg != want {
 		t.Fatalf("DefaultConfig() = %+v, want %+v", cfg, want)
@@ -62,19 +62,18 @@ func TestZeroConfigInvalid(t *testing.T) {
 	// Zero is legitimate for Seed, Duration, PlateWarpAmplitude,
 	// LandCoverage, MaxPlateSpeed, OceanicDampening, SubductionDistance,
 	// SubductionUplift, ContinentalErosion, SedimentAccretion,
-	// CollisionPenetration, CollisionDistance, CollisionCoefficient, and
-	// RiftingRate, and
-	// for nothing else. A zero TrenchElevation is invalid only because it is not
+	// CollisionPenetration, CollisionDistance, CollisionCoefficient,
+	// RiftingRate, and ElevationNoiseAmplitude, and for nothing else. A zero TrenchElevation is invalid only because it is not
 	// below the AbyssalElevation.
 	for _, field := range []string{"Radius", "SampleSpacing", "TimeStep", "Plates", "PlateWarpFeatureSize",
-		"RidgeElevation", "AbyssalElevation", "TrenchElevation", "MaxContinentalElevation"} {
+		"RidgeElevation", "AbyssalElevation", "TrenchElevation", "MaxContinentalElevation", "ElevationNoiseFeatureSize"} {
 		if !strings.Contains(err.Error(), ": "+field+": ") {
 			t.Errorf("error does not name %s: %v", field, err)
 		}
 	}
 	for _, field := range []string{"Seed", "Duration", "PlateWarpAmplitude", "LandCoverage", "MaxPlateSpeed", "OceanicDampening",
 		"SubductionDistance", "SubductionUplift", "ContinentalErosion", "SedimentAccretion",
-		"CollisionPenetration", "CollisionDistance", "CollisionCoefficient", "RiftingRate"} {
+		"CollisionPenetration", "CollisionDistance", "CollisionCoefficient", "RiftingRate", "ElevationNoiseAmplitude"} {
 		if strings.Contains(err.Error(), ": "+field+": ") {
 			t.Errorf("error names %s, whose zero is valid: %v", field, err)
 		}
@@ -152,6 +151,10 @@ func TestValidateNamesField(t *testing.T) {
 		{"CollisionCoefficient", func(c *yaee.Config) { c.CollisionCoefficient = nan }},
 		{"RiftingRate", func(c *yaee.Config) { c.RiftingRate = -0.001 }},
 		{"RiftingRate", func(c *yaee.Config) { c.RiftingRate = inf }},
+		{"ElevationNoiseAmplitude", func(c *yaee.Config) { c.ElevationNoiseAmplitude = -0.1 }},
+		{"ElevationNoiseAmplitude", func(c *yaee.Config) { c.ElevationNoiseAmplitude = nan }},
+		{"ElevationNoiseFeatureSize", func(c *yaee.Config) { c.ElevationNoiseFeatureSize = 0 }},
+		{"ElevationNoiseFeatureSize", func(c *yaee.Config) { c.ElevationNoiseFeatureSize = inf }},
 		{"Duration", func(c *yaee.Config) { c.Duration = 2*yaee.MaxSteps + 1 }},
 		{"Duration", func(c *yaee.Config) { c.Duration = 1; c.TimeStep = 1e-7 }},
 		{"SampleSpacing", func(c *yaee.Config) { c.SampleSpacing = 1e-300 }},
@@ -205,6 +208,9 @@ func TestValidateAcceptsBoundaries(t *testing.T) {
 		func(c *yaee.Config) { c.CollisionDistance = 0 },
 		func(c *yaee.Config) { c.CollisionCoefficient = 0 },
 		func(c *yaee.Config) { c.RiftingRate = 0 },
+		func(c *yaee.Config) { c.ElevationNoiseAmplitude = 0 },
+		func(c *yaee.Config) { c.ElevationNoiseAmplitude = 100 },
+		func(c *yaee.Config) { c.ElevationNoiseFeatureSize = 1e-3 },
 		func(c *yaee.Config) { c.Duration = 2 * yaee.MaxSteps },
 		func(c *yaee.Config) {
 			c.RidgeElevation, c.AbyssalElevation, c.TrenchElevation, c.MaxContinentalElevation = -1e-9, -2e-9, -3e-9, 1e-9
@@ -226,7 +232,7 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 		MaxPlateSpeed: 77.7, OceanicDampening: 0.1 / 3,
 		SubductionDistance: 1234.5, SubductionUplift: 2.0 / 3, ContinentalErosion: 1e-5, SedimentAccretion: 0.7,
 		CollisionPenetration: 123.25, CollisionDistance: 3999.5, CollisionCoefficient: 2.5e-6,
-		RiftingRate: 1.0 / 300,
+		RiftingRate: 1.0 / 300, ElevationNoiseAmplitude: 0.1 * 3, ElevationNoiseFeatureSize: 1e7 / 3,
 	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
@@ -246,11 +252,12 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 	}
 	const want = `{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,` +
 		`"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,` +
-		`"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,` +
+		`"land_coverage":0.3,"ridge_elevation_km":-2.5,"abyssal_elevation_km":-6,"trench_elevation_km":-10,` +
 		`"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,` +
-		`"oceanic_dampening_km_per_my":0.04,"subduction_distance_km":1800,"subduction_uplift_km_per_my":0.6,` +
-		`"continental_erosion_km_per_my":0.03,"sediment_accretion_km_per_my":0.3,` +
-		`"collision_penetration_km":300,"collision_distance_km":4200,"collision_coefficient_per_km":0.000013,"rifting_rate_per_my":0.004}`
+		`"oceanic_dampening_km_per_my":0.17,"subduction_distance_km":600,"subduction_uplift_km_per_my":0.6,` +
+		`"continental_erosion_km_per_my":0.1,"sediment_accretion_km_per_my":0.3,` +
+		`"collision_penetration_km":300,"collision_distance_km":1000,"collision_coefficient_per_km":5e-7,"rifting_rate_per_my":0.004,` +
+		`"elevation_noise_amplitude_km":0.5,"elevation_noise_feature_size_km":2000}`
 	if string(data) != want {
 		t.Fatalf("DefaultConfig as JSON:\n got %s\nwant %s", data, want)
 	}
@@ -393,9 +400,10 @@ func TestGenerateSimulated(t *testing.T) {
 		t.Fatal("the simulation changed the samples or the triangles")
 	}
 	still := cfg
-	still.MaxPlateSpeed = 0
+	still.MaxPlateSpeed, still.ElevationNoiseAmplitude = 0, 0
 	// Plates that do not move leave the crust where it was; the ocean
-	// still ages and sinks, and the land erodes.
+	// still ages and sinks toward the abyssal elevation, and the land
+	// erodes.
 	rest := mustGenerate(t, still)
 	for _, name := range []string{yaee.AttrPlate, yaee.AttrCrustType, yaee.AttrThickness, yaee.AttrRidgeDirection} {
 		if !reflect.DeepEqual(rest.Attribute(name), start.Attribute(name)) {
@@ -413,14 +421,32 @@ func TestGenerateSimulated(t *testing.T) {
 		if kind == yaee.CrustContinental && (age != 0 || math.Abs(z-eroded) > 1e-12) {
 			t.Fatalf("with MaxPlateSpeed 0, continental sample %d went from %v km to %v km, age %v", i, z0, z, age)
 		}
-		if kind == yaee.CrustOceanic && (math.Abs(age-age0-cfg.Duration) > 1e-6 || !(z < z0) || z < cfg.TrenchElevation) {
+		sinks := z0 > cfg.AbyssalElevation
+		if kind == yaee.CrustOceanic && (math.Abs(age-age0-cfg.Duration) > 1e-6 || sinks != (z < z0) || z > z0 || z < cfg.AbyssalElevation) {
 			t.Fatalf("with MaxPlateSpeed 0, oceanic sample %d went from %v km, %v My to %v km, %v My", i, z0, age0, z, age)
 		}
 	}
 	undamped := still
 	undamped.OceanicDampening, undamped.ContinentalErosion = 0, 0
 	if flat := mustGenerate(t, undamped); !reflect.DeepEqual(flat.Attribute(yaee.AttrElevation), start.Attribute(yaee.AttrElevation)) {
-		t.Fatal("with MaxPlateSpeed 0, OceanicDampening 0, and ContinentalErosion 0 the elevation is not that of the initial world")
+		t.Fatal("with MaxPlateSpeed 0, OceanicDampening 0, ContinentalErosion 0, and ElevationNoiseAmplitude 0 the elevation is not that of the initial world")
+	}
+	// The noise moves every elevation by at most its amplitude, and
+	// some by more than a tenth of it.
+	noisy := undamped
+	noisy.ElevationNoiseAmplitude = 0.5
+	moved := 0
+	for i, z := range mustGenerate(t, noisy).Attribute(yaee.AttrElevation).Float64s {
+		d := math.Abs(z - start.Attribute(yaee.AttrElevation).Float64s[i])
+		if d > 0.5 {
+			t.Fatalf("ElevationNoiseAmplitude 0.5 moved sample %d by %v km", i, d)
+		}
+		if d > 0.05 {
+			moved++
+		}
+	}
+	if moved == 0 {
+		t.Fatal("ElevationNoiseAmplitude 0.5 moved no elevation by more than 0.05 km")
 	}
 	// A shorter last step: 5 My in steps of 2 is not 4 or 6 My.
 	short := cfg

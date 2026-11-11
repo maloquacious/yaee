@@ -103,7 +103,7 @@ const (
 //	                  oceanic                               continental
 //	thickness         7 km                                  35 km
 //	elevation         z_r + (z_a − z_r) · s(d/500)          z_c · (0.01 + 0.04 · s(d/500))
-//	oceanic age       (z_t/ε_o) · ln((z_a−z_t)/(z_r−z_t))   0
+//	oceanic age       3 · |z_a|/ε_o                         0
 //	ridge direction   zero vector                           zero vector
 //	orogeny age       0                                     0
 //	orogeny type      none                                  none
@@ -111,9 +111,9 @@ const (
 //
 // The ocean floor is at the abyssal plain z_a, rising to the ridge
 // elevation z_r, the highest the paper gives oceanic crust, at the
-// coast. Its age is the time the paper's oceanic dampening (§4.5) takes
-// to lower crust from z_r to z_a, so that age and elevation agree where
-// the simulation takes over: 203 My with the defaults, and 0 if
+// coast. Its age is three time constants of the oceanic dampening
+// (§4.5; see InitialOceanicAge), by which crust from a ridge is nearly
+// at z_a: 106 My with the defaults, and 0 if
 // OceanicDampening is 0. No ridge exists
 // yet, so no sample has a ridge direction; no mountain has been raised,
 // so no sample has an orogeny or a fold.
@@ -229,21 +229,22 @@ func (Crust) Run(ctx context.Context, w *model.World, rng *rand.Rand) error {
 }
 
 // InitialOceanicAge returns the age in My given to all oceanic crust at
-// the start: the time the paper's oceanic dampening (§4.5),
-//
-//	dz/dt = −(1 − z/z_t) · ε_o,
-//
-// takes to lower crust from the ridge elevation z_r to the abyssal
-// elevation z_a, which is (z_t/ε_o) · ln((z_a − z_t)/(z_r − z_t)), with
-// ε_o the parameter OceanicDampening. With the paper's constants it is
-// 202.7 My. With ε_o = 0 no age lowers crust that far, and the age is 0.
+// the start: initialOceanTimes times |z_a|/ε_o, the time constant of the
+// oceanic dampening (AgeOcean), with z_a the abyssal elevation and ε_o
+// the parameter OceanicDampening. Crust that formed at the ridge
+// elevation that long ago has made 95% of its descent to z_a, which is
+// where the initial ocean floor is. With the defaults it is 105.9 My.
+// With ε_o = 0 crust never sinks, and the age is 0.
 func InitialOceanicAge(p model.Params) float64 {
 	if p.OceanicDampening == 0 {
 		return 0
 	}
-	return p.TrenchElevation / p.OceanicDampening *
-		math.Log((p.AbyssalElevation-p.TrenchElevation)/(p.RidgeElevation-p.TrenchElevation))
+	return initialOceanTimes * math.Abs(p.AbyssalElevation) / p.OceanicDampening
 }
+
+// initialOceanTimes is the age of the initial oceanic crust, in time
+// constants of the oceanic dampening.
+const initialOceanTimes = 3.0
 
 // distances returns each sample's distance in km to the nearest edge
 // sample: a sample i with a neighbour j for which differ(i, j) is true.

@@ -24,7 +24,7 @@ import (
 // architectures may differ.
 //
 // At the default scale Generate takes about 40 seconds on ten processors
-// and uses about 850 MB of memory. It may run goroutines, all of which
+// and uses about 800 MB of memory. It may run goroutines, all of which
 // have ended when it returns.
 func Generate(ctx context.Context, cfg Config) (*World, error) {
 	if err := cfg.Validate(); err != nil {
@@ -69,6 +69,9 @@ func Generate(ctx context.Context, cfg Config) (*World, error) {
 		CollisionCoefficient: cfg.CollisionCoefficient,
 
 		RiftingRate: cfg.RiftingRate,
+
+		ElevationNoiseAmplitude:   cfg.ElevationNoiseAmplitude,
+		ElevationNoiseFeatureSize: cfg.ElevationNoiseFeatureSize,
 	})
 	if err := model.Run(ctx, mw, cfg.Seed, stages()); err != nil {
 		return nil, err
@@ -78,7 +81,7 @@ func Generate(ctx context.Context, cfg Config) (*World, error) {
 
 // stages returns the stages of generation, in the order they run.
 func stages() []model.Stage {
-	return []model.Stage{tectonics.Plates{}, tectonics.Crust{}, tectonics.Motion{}, tectonics.Simulation{}}
+	return []model.Stage{tectonics.Plates{}, tectonics.Crust{}, tectonics.Motion{}, tectonics.Simulation{}, tectonics.ElevationNoise{}}
 }
 
 // export copies the working data into a World.

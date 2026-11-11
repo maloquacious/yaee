@@ -18,6 +18,8 @@ import (
 	"maps"
 	"os"
 	"os/signal"
+	"runtime"
+	"runtime/pprof"
 	"slices"
 	"strings"
 	"time"
@@ -203,7 +205,7 @@ func generateCommand() *command {
 		warpSize    = fs.Float64("plate-warp-feature-size", def.PlateWarpFeatureSize, "Length of the largest bends in the initial plate boundaries, in `km`. Greater than 0.")
 		land        = fs.Float64("land-coverage", def.LandCoverage, "Share of the sphere's area that is continental crust at the start: a `fraction` from 0 to 1.")
 		ridge       = fs.Float64("ridge-elevation", def.RidgeElevation, "Highest elevation of oceanic crust, in `km`. Less than 0 and greater than -abyssal-elevation.")
-		abyssal     = fs.Float64("abyssal-elevation", def.AbyssalElevation, "Elevation of the abyssal plains, in `km`. Less than -ridge-elevation and greater than -trench-elevation.")
+		abyssal     = fs.Float64("abyssal-elevation", def.AbyssalElevation, "Elevation of the abyssal plains, which oceanic crust sinks toward as it ages, in `km`. Less than -ridge-elevation and greater than -trench-elevation.")
 		trench      = fs.Float64("trench-elevation", def.TrenchElevation, "Elevation of the deepest oceanic trench, in `km`. Less than -abyssal-elevation.")
 		maxCont     = fs.Float64("max-continental-elevation", def.MaxContinentalElevation, "Highest elevation of continental crust, in `km`. Greater than 0.")
 		maxSpeed    = fs.Float64("max-plate-speed", def.MaxPlateSpeed, "Greatest speed of any point of a plate, in `km/My` (equal to mm/y). At least 0; 0 gives plates that do not move.")
@@ -216,9 +218,13 @@ func generateCommand() *command {
 		colDistance = fs.Float64("collision-distance", def.CollisionDistance, "Greatest distance from a continental collision at which land is raised, in `km`. At least 0; 0 gives collisions that raise nothing.")
 		colCoeff    = fs.Float64("collision-coefficient", def.CollisionCoefficient, "Rise at the suture of a continental collision per km² of the continent that changes plates, in `1/km`. At least 0; 0 gives collisions that raise nothing.")
 		riftRate    = fs.Float64("rifting-rate", def.RiftingRate, "Mean number of times per My that a wholly continental plate of average initial area breaks into smaller plates, in `1/My`. At least 0; 0 gives plates that never rift.")
+		noiseAmp    = fs.Float64("elevation-noise-amplitude", def.ElevationNoiseAmplitude, "Greatest change that the low-frequency noise applied after the simulation makes to an elevation, in `km`. At least 0; 0 gives no noise.")
+		noiseSize   = fs.Float64("elevation-noise-feature-size", def.ElevationNoiseFeatureSize, "Distance across the largest features of the elevation noise, in `km`. Greater than 0.")
 		outPath     = fs.String("out", "", "Write the datafile to this `file`, replacing it if it exists.")
 		writeConfig = fs.String("write-config", "", "Write the effective Config as JSON to this `file`, or to standard output if the value is \"-\".")
 		verbose     = fs.Bool("v", false, "Print the sample count, file size, and timings to standard error.")
+		cpuProfile  = fs.String("cpuprofile", "", "Write a CPU profile of the generation to this `file`, for \"go tool pprof\".")
+		memProfile  = fs.String("memprofile", "", "Write a profile of the memory allocated during the generation to this `file`, for \"go tool pprof -sample_index=alloc_space\".")
 	)
 	return &command{
 		name:    "generate",
@@ -227,11 +233,11 @@ func generateCommand() *command {
 and no -out, the Config is checked and written and no world is generated.
 
 The effective Config is the default Config, then the members of the
--config file, then each of the flags from -seed to -rifting-rate
-that is given. The defaults shown above are
-the default Config: an Earth-like world of 942059 samples. An invalid
-Config is reported with the name of each invalid field, and nothing is
-written.
+-config file, then each flag that is given, other than -config,
+-cpuprofile, -memprofile, -out, -v, and -write-config: every other flag
+sets one member of the Config. The defaults shown above are the default
+Config: an Earth-like world of 942059 samples. An invalid Config is
+reported with the name of each invalid field, and nothing is written.
 
 The Config file is one JSON object. This is the default Config:
 %s
@@ -332,6 +338,12 @@ Example:
 			if wasSet(fs, "rifting-rate") {
 				cfg.RiftingRate = *riftRate
 			}
+			if wasSet(fs, "elevation-noise-amplitude") {
+				cfg.ElevationNoiseAmplitude = *noiseAmp
+			}
+			if wasSet(fs, "elevation-noise-feature-size") {
+				cfg.ElevationNoiseFeatureSize = *noiseSize
+			}
 			if err := cfg.Validate(); err != nil {
 				return err
 			}
@@ -354,12 +366,30 @@ Example:
 				return nil
 			}
 
+			if *cpuProfile != "" {
+				f, err := os.Create(*cpuProfile)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+				if err := pprof.StartCPUProfile(f); err != nil {
+					return err
+				}
+				defer pprof.StopCPUProfile()
+			}
 			start := time.Now()
 			world, err := yaee.Generate(ctx, cfg)
 			if err != nil {
 				return err
 			}
 			generated := time.Now()
+			pprof.StopCPUProfile() // does nothing if no profile was started
+			if *memProfile != "" {
+				runtime.GC() // so that the profile is complete
+				if _, err := writeFile(*memProfile, func(w io.Writer) error { return pprof.Lookup("allocs").WriteTo(w, 0) }); err != nil {
+					return err
+				}
+			}
 			size, err := writeFile(*outPath, func(w io.Writer) error { return yaee.Write(w, world) })
 			if err != nil {
 				return err
