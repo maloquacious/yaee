@@ -312,7 +312,7 @@ Done when:
 - Slab pull moves a plate's rotation axis toward its subduction front and leaves it unit length.
 - In a full-scale run, mountain ranges appear along convergent continental margins and trenches along the fronts, and the reviewer accepts the images.
 
-**Built** in versions 0.15.0-alpha and 0.16.0-alpha; the reviewer has not yet accepted the images. The code is `internal/tectonics/subduction.go`, the overlap rule of `Resample`, and `render.Orogeny`.
+**Done** in versions 0.15.0-alpha and 0.16.0-alpha. The reviewer accepted the images on 2026-11-11, with the straight coasts and the too-high land below noted as known. The code is `internal/tectonics/subduction.go`, the overlap rule of `Resample`, and `render.Orogeny`.
 
 What was built, where the paper and the plan left a choice:
 
