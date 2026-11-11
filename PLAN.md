@@ -189,7 +189,7 @@ Measured at full scale (942,059 samples) on the development machine:
 
 Tracked by [#3](https://github.com/maloquacious/yaee/issues/3), with sub-issues #18 to #20.
 
-**Built** in version 0.11.0-alpha; the review of the images, the last item below, has been asked for and is not yet given. The code is `internal/noise` and `internal/tectonics` (`Plates`, `Crust`), with `sphere.Mesh.PointAreas` and `sphere.Mesh.Distances`.
+**Done** in version 0.11.0-alpha. The reviewer accepted the full-scale plate and crust images of seeds 1, 2, and 3 on 2026-11-11. The code is `internal/noise` and `internal/tectonics` (`Plates`, `Crust`), with `sphere.Mesh.PointAreas` and `sphere.Mesh.Distances`.
 
 Seeded coherent noise. Plate centroids distributed over the sphere; plates as the Voronoi cells of the centroids, with boundaries warped by noise (§3, Workflow). Continental and oceanic crust assigned to reach the configured land coverage. Initial elevation, thickness, and age. Images of plates and crust type.
 
