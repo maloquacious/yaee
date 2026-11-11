@@ -3,7 +3,7 @@
 Guidance for agents when working in this repository.
 
 This repository is `yaee`: a Go package, with a small command around it, that simulates plate tectonics on a sphere.
-The plan, its scope, and its milestones are in [PORT_PLAN.md](PORT_PLAN.md). Read it before writing code.
+What we are building, and its scope, are in [CLAUDE.md](CLAUDE.md). Read it before writing code.
 
 ## Priorities
 
@@ -12,14 +12,11 @@ When proposing what to work on next, first check for open bugs (`gh issue list -
 If any are open, propose working on them instead of new features or documentation.
 An explicit request from the user takes precedence; do the requested work.
 
-Otherwise, work on the earliest unfinished milestone in PORT_PLAN.md.
-Do not start a milestone while an earlier one's "done when" is unmet.
-
 ## Build and test
 
-Prefer `go run` to `go build`: `go run ./cmd/tecto ...`.
+Prefer `go run` to `go build`: `go run ./cmd/yaee ...`.
 Put any binary you do build, and every other scratch artifact, under `tmp/`.
-That includes generated worlds, debug PNGs, and any copy of the tectonics.js source.
+That includes generated worlds and debug PNGs.
 Never write build artifacts or output files to the repository root.
 `tmp/` is git-ignored, and `go.mod` has an `ignore` directive that keeps `./...` out of it.
 
@@ -35,7 +32,7 @@ Documentation-only changes need no checks.
 
 ## Verification
 
-The model is verified in Go, by the checks listed under "Verification" in PORT_PLAN.md.
+The model is verified in Go, by tests.
 
 - Every algorithm lands with the tests that define what correct means for it: an analytic case, an invariant, or a conservation budget.
 - A test that needs a grid uses the smallest detail that shows the behavior, so `go test ./...` stays fast.
@@ -64,7 +61,6 @@ The model is verified in Go, by the checks listed under "Verification" in PORT_P
 - Tag the commit.
   The tag is `v` followed by the version in `version.go` at that commit, such as `v0.5.0`; check that they match before pushing the tag.
 - Never move or delete a pushed tag. The Go proxy keeps the first copy it sees, so a bad tag is fixed with a new version.
-- Hāmwold then requires the tagged version, and its `replace` directive is removed.
 
 ## Git workflow
 
