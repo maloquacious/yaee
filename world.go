@@ -55,15 +55,19 @@ type World struct {
 // appear in World.Attributes.
 const (
 	// AttrPlate is the number of the tectonic plate the sample belongs
-	// to. Type Int32, 1 component, no unit. Range: 0 to
-	// Config.Plates−1.
+	// to. Type Int32, 1 component, no unit. Range: 0 to P−1, with P
+	// the number of plates in the world: 1 + the greatest value. Every
+	// number in that range is used by at least one sample.
 	//
-	// In the initial world (Config.Duration 0) every number in that
-	// range is used by at least one sample, and the samples of one plate
-	// form a single connected region: any two of them are joined by a
-	// path of neighbouring samples of the same plate. Once plates have
-	// moved, neither holds: a plate may be in several pieces, and a
-	// plate that others have covered may have no samples.
+	// In the initial world (Config.Duration 0) P is Config.Plates, and
+	// the samples of one plate form a single connected region: any two
+	// of them are joined by a path of neighbouring samples of the same
+	// plate. Once plates have moved, a plate may be in several pieces,
+	// and P may be less or greater than Config.Plates: a plate that
+	// loses all its samples is removed, and the plates above it take
+	// the next lower numbers; a plate that rifts becomes two to four
+	// plates. A plate number therefore identifies a plate within one
+	// world only.
 	AttrPlate = "plate"
 
 	// AttrCrustType is the type of the crust (x_C in the paper's

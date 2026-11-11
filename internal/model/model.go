@@ -52,6 +52,8 @@ type Params struct {
 	CollisionPenetration float64 // km; the interpenetration distance of §6
 	CollisionDistance    float64 // km; r_c
 	CollisionCoefficient float64 // per km; Δ_c
+
+	RiftingRate float64 // per My; λ_0 of §4.4
 }
 
 // Values of World.CrustType.

@@ -213,6 +213,7 @@ func generateCommand() *command {
 		penetration = fs.Float64("collision-penetration", def.CollisionPenetration, "How far one continent goes beneath another before they collide, in `km`. At least 0.")
 		colDistance = fs.Float64("collision-distance", def.CollisionDistance, "Greatest distance from a continental collision at which land is raised, in `km`. At least 0; 0 gives collisions that raise nothing.")
 		colCoeff    = fs.Float64("collision-coefficient", def.CollisionCoefficient, "Rise at the suture of a continental collision per km² of the continent that changes plates, in `1/km`. At least 0; 0 gives collisions that raise nothing.")
+		riftRate    = fs.Float64("rifting-rate", def.RiftingRate, "Mean number of times per My that a wholly continental plate of average initial area breaks into smaller plates, in `1/My`. At least 0; 0 gives plates that never rift.")
 		outPath     = fs.String("out", "", "Write the datafile to this `file`, replacing it if it exists.")
 		writeConfig = fs.String("write-config", "", "Write the effective Config as JSON to this `file`, or to standard output if the value is \"-\".")
 		verbose     = fs.Bool("v", false, "Print the sample count, file size, and timings to standard error.")
@@ -224,8 +225,8 @@ func generateCommand() *command {
 and no -out, the Config is checked and written and no world is generated.
 
 The effective Config is the default Config, then the members of the
--config file, then each of the flags from -seed to
--collision-coefficient that is given. The defaults shown above are
+-config file, then each of the flags from -seed to -rifting-rate
+that is given. The defaults shown above are
 the default Config: an Earth-like world of 942059 samples. An invalid
 Config is reported with the name of each invalid field, and nothing is
 written.
@@ -325,6 +326,9 @@ Example:
 			}
 			if wasSet(fs, "collision-coefficient") {
 				cfg.CollisionCoefficient = *colCoeff
+			}
+			if wasSet(fs, "rifting-rate") {
+				cfg.RiftingRate = *riftRate
 			}
 			if err := cfg.Validate(); err != nil {
 				return err

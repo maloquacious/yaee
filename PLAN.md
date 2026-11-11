@@ -71,7 +71,7 @@ Each is decided in the milestone shown, written up in the code comment, and adde
 | Which plate subducts when both are oceanic and close in age, and what "partial subduction" does | 6 |
 | How a terrane is found and when two plates have "sufficient continental mass" (§4.2) | 7 |
 | Whether the area ratio is inside the square root in the collision radius law (§4.2) | 7 |
-| λ0 and the transfer function f(x_P) for rifting (§4.4) | 8 |
+| λ0, its time window, and the transfer function f(x_P) for rifting (§4.4) | 8 |
 | What happens to a plate that is entirely consumed | 8 |
 
 ## Design
@@ -409,6 +409,42 @@ Done when:
 - Fragments move apart: new ocean opens along every fracture.
 - Larger continental plates rift more often than smaller ones.
 - A 250 My full-scale run neither collapses into one continent nor shatters into fragments, and the reviewer accepts the images.
+
+**Built** in version 0.18.0-alpha; the images await the reviewer. The code is `internal/tectonics/rift.go` (`DrawRifts`, `Rift`, `RemoveEmptyPlates`, `Subduction.Renumber`) and the resampling rule of `simulate`.
+
+What was built, where the paper and the plan left a choice:
+
+- λ_0 is a rate per My, the `Config` field `RiftingRate` (0.004): the mean number of rifts per My of a wholly continental plate of area 𝒜_0 = 4πR²/`Plates`. A plate rifts in a step of δt with probability 1 − exp(−λ δt), λ = λ_0 f(x_P) 𝒜/𝒜_0, so the number of rifts does not depend on the time step. The paper's P = λ e^(−λ) is the chance of exactly one event in an unstated window; ours is the chance of at least one, and agrees with it to first order.
+- f(x_P) = 0.25 + 0.75 x_P: linear, 1 for a wholly continental plate, and above 0 for an oceanic one so that a large oceanic plate still breaks.
+- A plate smaller than 𝒜_0 does not rift. With half that, the plates of a default run grew from 40 to 67 in 250 My; with 𝒜_0 the number stays near 40. No plate rifts if `MaxPlateSpeed` is 0.
+- n is 2, 3, or 4 with equal chance. Centroids are samples of the plate drawn uniformly, kept apart as the initial centroids are. The fragments are the warped Voronoi cells of the centroids within the plate, made connected as the initial plates are, with the warp scaled to the size of a fragment.
+- Motion: every fragment gets a new movement in place of the plate's. Its centroid moves straight away from the plate's centroid, all fragments at one angular speed v/R with v uniform from 0 to v_0. Any two fragments then move apart everywhere along their boundary; a test checks every boundary place over 40 rifts.
+- A rift forces a resampling in its step, as a collision does, and is applied after the step's collisions.
+- A plate that has no sample left is removed after each resampling, and the plates above it take the next lower numbers. A plate number therefore identifies a plate within one datafile only; the specification says so, and that the number of plates is 1 + the greatest value of `plate`. The fragment of the first centroid keeps the plate's number, and the others are appended.
+- The simulation stage now draws random numbers, for rifting only.
+
+Measured at full scale (942,059 samples, 250 My, 125 steps) on the development machine:
+
+| Measure | Value |
+|---------|-------|
+| `yaee generate` | 40 s, 820 MB peak resident memory |
+| Datafile | 133,773,396 bytes |
+| Runs with `GOMAXPROCS=1` and with the default | Identical datafile bytes |
+| With `RiftingRate` 0, seed 1 | The collisions (30) and elevation statistics of milestone 7; 29 plates, its empty plates removed |
+| Steps with a rift, seeds 1 to 3 | 14, 10, 10 |
+| Plates at the end, seeds 1 to 3 | 46, 40, 34 (29 for seed 1 without rifting) |
+| Resamplings, seeds 1 to 3 | 66, 67, 79 (48 for seed 1 without rifting) |
+| Collisions, seeds 1 to 3 | 64, 76, 97 (30 for seed 1 without rifting) |
+| Continental share of the samples, seeds 1 to 3 | 0.274, 0.271, 0.269 |
+| Continental elevation, seed 1 | median 7.4 km, 90th percentile 8.8 km, maximum 9.8 km |
+
+Seen in the images:
+
+- Land is in several continents instead of one mass, and the number of plates holds.
+- For milestone 9: the land is higher again. Fragments set off at up to v_0 and run into their neighbours, so a run has two to three times the collisions, and each raises its suture toward z_c. The median continental elevation of seed 1 went from 4.8 km to 7.4 km.
+- For milestone 9: oceanic crust above sea level went from 0.9% to 3 to 6% of the samples, along subduction fronts.
+- Thin seas one or two samples wide run through some continents. The one traced (seed 2) lies inside a single plate: a rift that opened a narrow sea, after which the two fragments collided and joined with the sea still between them. A collision moves the terranes and what they enclose; it does not close the ocean between them.
+- At `RiftingRate` 0.006 and above the land breaks into many small pieces and the number of plates grows through the run (51 to 62 at 250 My for seeds 1 to 3).
 
 ### 9. An Earth-like default
 

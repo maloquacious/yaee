@@ -49,27 +49,38 @@ const resampleDistance = 500.0
 //  8. Subduction.SlabPull turns the axes of the subducting plates
 //     (§4.1), which changes how they move from the next step on.
 //
+// DrawRifts then decides which plates rift in the step
+// (§4.4).
+//
 // The world is then resampled with Resample if any of these holds:
 //
 //   - the fastest sample of any plate has moved resampleDistance km or
 //     more since the last resampling, counting each step as that step's
 //     length times the speed of the fastest sample at its start;
-//   - step 4 found a collision. Subduction.Collide then moves the
-//     terranes and raises the land (§4.2);
+//   - step 4 found a collision;
+//   - a plate rifts;
 //   - it was the last step, and any plate has moved at all.
 //
-// The stage therefore always leaves the crust on the fixed samples, with
-// every plate's rotation the identity and no sample marked as subducted.
+// After a resampling, in order: Subduction.Collide moves the terranes of
+// the collisions and raises the land (§4.2); Rift splits each rifting
+// plate, in order of plate number (§4.4); and RemoveEmptyPlates removes
+// the plates that have no sample left and numbers the rest again.
 //
-// The stage draws no random numbers yet.
+// The stage therefore always leaves the crust on the fixed samples, with
+// every plate's rotation the identity, no sample marked as subducted,
+// and, if it resampled at all, every plate number from 0 to NumPlates − 1
+// used by at least one sample.
+//
+// Random numbers are drawn only for rifting: by DrawRifts in every step,
+// and by Rift.
 type Simulation struct{}
 
 // Name returns "simulation".
 func (Simulation) Name() string { return "simulation" }
 
 // Run applies the stage.
-func (Simulation) Run(ctx context.Context, w *model.World, _ *rand.Rand) error {
-	_, err := simulate(ctx, w, resampleDistance)
+func (Simulation) Run(ctx context.Context, w *model.World, rng *rand.Rand) error {
+	_, err := simulate(ctx, w, rng, resampleDistance)
 	return err
 }
 
@@ -92,9 +103,9 @@ func Steps(duration, timeStep float64) int {
 }
 
 // simulate runs the simulation, resampling each time the fastest sample
-// has moved distance km, and in every step that has a collision. It
-// returns the number of resamplings.
-func simulate(ctx context.Context, w *model.World, distance float64) (resamplings int, err error) {
+// has moved distance km, and in every step that has a collision or a
+// rift. It returns the number of resamplings.
+func simulate(ctx context.Context, w *model.World, rng *rand.Rand, distance float64) (resamplings int, err error) {
 	steps := Steps(w.Duration, w.TimeStep)
 	sub := NewSubduction(w)
 	var moved float64   // km, since the last resampling
@@ -113,11 +124,18 @@ func simulate(ctx context.Context, w *model.World, distance float64) (resampling
 			return resamplings, err
 		}
 		collisions := sub.Pending()
-		if moved >= distance || len(collisions) > 0 || s == steps-1 && moved > 0 {
+		rifts := DrawRifts(w, sub.areas, rng, dt)
+		if moved >= distance || len(collisions) > 0 || len(rifts) > 0 || s == steps-1 && moved > 0 {
 			if err := Resample(ctx, w, elapsed); err != nil {
 				return resamplings, err
 			}
 			sub.Collide(w, collisions)
+			for _, k := range rifts {
+				if _, err := Rift(ctx, w, sub.areas, k, rng); err != nil {
+					return resamplings, err
+				}
+			}
+			sub.Renumber(w, RemoveEmptyPlates(w))
 			sub.Reset(w)
 			resamplings++
 			moved, elapsed = 0, 0

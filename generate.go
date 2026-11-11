@@ -23,7 +23,7 @@ import (
 // whatever the number of processors. Worlds generated on different
 // architectures may differ.
 //
-// At the default scale Generate takes about 30 seconds on ten processors
+// At the default scale Generate takes about 40 seconds on ten processors
 // and uses about 850 MB of memory. It may run goroutines, all of which
 // have ended when it returns.
 func Generate(ctx context.Context, cfg Config) (*World, error) {
@@ -67,6 +67,8 @@ func Generate(ctx context.Context, cfg Config) (*World, error) {
 		CollisionPenetration: cfg.CollisionPenetration,
 		CollisionDistance:    cfg.CollisionDistance,
 		CollisionCoefficient: cfg.CollisionCoefficient,
+
+		RiftingRate: cfg.RiftingRate,
 	})
 	if err := model.Run(ctx, mw, cfg.Seed, stages()); err != nil {
 		return nil, err

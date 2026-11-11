@@ -41,7 +41,7 @@ const MaxSteps = 1_000_000
 // are named by the json tags below, and decodes from that object without
 // loss:
 //
-//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.04,"subduction_distance_km":1800,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.03,"sediment_accretion_km_per_my":0.3,"collision_penetration_km":300,"collision_distance_km":4200,"collision_coefficient_per_km":0.000013}
+//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.04,"subduction_distance_km":1800,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.03,"sediment_accretion_km_per_my":0.3,"collision_penetration_km":300,"collision_distance_km":4200,"collision_coefficient_per_km":0.000013,"rifting_rate_per_my":0.004}
 //
 // Lengths are in kilometres (km) and times in millions of years (My).
 type Config struct {
@@ -275,6 +275,18 @@ type Config struct {
 	// It falls to 0 at the distance that CollisionDistance gives. 0 gives
 	// collisions that raise nothing.
 	CollisionCoefficient float64 `json:"collision_coefficient_per_km"`
+
+	// RiftingRate is how often a plate breaks into two to four plates
+	// that move apart (λ_0 of the paper's §4.4): the mean number of
+	// times per My for a plate that is wholly continental and has the
+	// area a₀, the area of the sphere divided by Plates.
+	// Unit: 1/My. Range: finite and at least 0. Default: 0.004.
+	//
+	// A plate of area a, of which the share x is continental, rifts at
+	// the rate RiftingRate · (0.25 + 0.75 · x) · a / a₀ per My, and not
+	// at all if a is less than a₀ or MaxPlateSpeed is 0. 0 gives plates
+	// that never rift.
+	RiftingRate float64 `json:"rifting_rate_per_my"`
 }
 
 // DefaultConfig returns the configuration of an Earth-like world at
@@ -286,8 +298,8 @@ type Config struct {
 // OceanicDampening 0.04 km/My, SubductionDistance 1800 km,
 // SubductionUplift 0.6 km/My, ContinentalErosion 0.03 km/My,
 // SedimentAccretion 0.3 km/My, CollisionPenetration 300 km,
-// CollisionDistance 4200 km, and CollisionCoefficient 1.3e-5 per km. It
-// passes Validate.
+// CollisionDistance 4200 km, CollisionCoefficient 1.3e-5 per km, and
+// RiftingRate 0.004 per My. It passes Validate.
 func DefaultConfig() Config {
 	return Config{
 		Seed:                 0,
@@ -317,6 +329,8 @@ func DefaultConfig() Config {
 		CollisionPenetration: 300,
 		CollisionDistance:    4200,
 		CollisionCoefficient: 1.3e-5,
+
+		RiftingRate: 0.004,
 	}
 }
 
@@ -407,6 +421,7 @@ func (c Config) Validate() error {
 		{"CollisionPenetration", c.CollisionPenetration},
 		{"CollisionDistance", c.CollisionDistance},
 		{"CollisionCoefficient", c.CollisionCoefficient},
+		{"RiftingRate", c.RiftingRate},
 	} {
 		if !(f.value >= 0) || math.IsInf(f.value, 0) {
 			invalid(f.name, "must be finite and at least 0, got %v", f.value)

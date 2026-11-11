@@ -118,7 +118,7 @@ func TestResampleAtRest(t *testing.T) {
 			}
 		}
 	}
-	if n, err := simulate(t.Context(), w, 500); err != nil || n != 0 {
+	if n, err := simulate(t.Context(), w, nil, 500); err != nil || n != 0 {
 		t.Fatalf("simulate: %d resamplings, error %v; want none", n, err)
 	}
 	if !snap(w).equal(snap(aged)) {
@@ -472,7 +472,7 @@ func TestSimulateSchedule(t *testing.T) {
 		if v := maxSpeed(w); math.Abs(v-100) > 0.1 {
 			t.Fatalf("the plate's fastest sample moves at %v km/My, want 100", v)
 		}
-		got, err := simulate(t.Context(), w, c.distance)
+		got, err := simulate(t.Context(), w, nil, c.distance)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -492,7 +492,7 @@ func TestSimulateIndependentOfProcessors(t *testing.T) {
 		w := moving(t, 20000, 2, earth())
 		decorate(w)
 		w.Duration = 40
-		if _, err := simulate(t.Context(), w, 500); err != nil {
+		if _, err := simulate(t.Context(), w, nil, 500); err != nil {
 			t.Fatal(err)
 		}
 		return snap(w)

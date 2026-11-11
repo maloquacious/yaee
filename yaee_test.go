@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -46,6 +47,7 @@ func TestDefaultConfig(t *testing.T) {
 		MaxPlateSpeed: 100, OceanicDampening: 0.04,
 		SubductionDistance: 1800, SubductionUplift: 0.6, ContinentalErosion: 0.03, SedimentAccretion: 0.3,
 		CollisionPenetration: 300, CollisionDistance: 4200, CollisionCoefficient: 1.3e-5,
+		RiftingRate: 0.004,
 	}
 	if cfg != want {
 		t.Fatalf("DefaultConfig() = %+v, want %+v", cfg, want)
@@ -60,7 +62,8 @@ func TestZeroConfigInvalid(t *testing.T) {
 	// Zero is legitimate for Seed, Duration, PlateWarpAmplitude,
 	// LandCoverage, MaxPlateSpeed, OceanicDampening, SubductionDistance,
 	// SubductionUplift, ContinentalErosion, SedimentAccretion,
-	// CollisionPenetration, CollisionDistance, and CollisionCoefficient, and
+	// CollisionPenetration, CollisionDistance, CollisionCoefficient, and
+	// RiftingRate, and
 	// for nothing else. A zero TrenchElevation is invalid only because it is not
 	// below the AbyssalElevation.
 	for _, field := range []string{"Radius", "SampleSpacing", "TimeStep", "Plates", "PlateWarpFeatureSize",
@@ -71,7 +74,7 @@ func TestZeroConfigInvalid(t *testing.T) {
 	}
 	for _, field := range []string{"Seed", "Duration", "PlateWarpAmplitude", "LandCoverage", "MaxPlateSpeed", "OceanicDampening",
 		"SubductionDistance", "SubductionUplift", "ContinentalErosion", "SedimentAccretion",
-		"CollisionPenetration", "CollisionDistance", "CollisionCoefficient"} {
+		"CollisionPenetration", "CollisionDistance", "CollisionCoefficient", "RiftingRate"} {
 		if strings.Contains(err.Error(), ": "+field+": ") {
 			t.Errorf("error names %s, whose zero is valid: %v", field, err)
 		}
@@ -147,6 +150,8 @@ func TestValidateNamesField(t *testing.T) {
 		{"CollisionDistance", func(c *yaee.Config) { c.CollisionDistance = inf }},
 		{"CollisionCoefficient", func(c *yaee.Config) { c.CollisionCoefficient = -1e-9 }},
 		{"CollisionCoefficient", func(c *yaee.Config) { c.CollisionCoefficient = nan }},
+		{"RiftingRate", func(c *yaee.Config) { c.RiftingRate = -0.001 }},
+		{"RiftingRate", func(c *yaee.Config) { c.RiftingRate = inf }},
 		{"Duration", func(c *yaee.Config) { c.Duration = 2*yaee.MaxSteps + 1 }},
 		{"Duration", func(c *yaee.Config) { c.Duration = 1; c.TimeStep = 1e-7 }},
 		{"SampleSpacing", func(c *yaee.Config) { c.SampleSpacing = 1e-300 }},
@@ -199,6 +204,7 @@ func TestValidateAcceptsBoundaries(t *testing.T) {
 		func(c *yaee.Config) { c.CollisionPenetration = 0 },
 		func(c *yaee.Config) { c.CollisionDistance = 0 },
 		func(c *yaee.Config) { c.CollisionCoefficient = 0 },
+		func(c *yaee.Config) { c.RiftingRate = 0 },
 		func(c *yaee.Config) { c.Duration = 2 * yaee.MaxSteps },
 		func(c *yaee.Config) {
 			c.RidgeElevation, c.AbyssalElevation, c.TrenchElevation, c.MaxContinentalElevation = -1e-9, -2e-9, -3e-9, 1e-9
@@ -220,6 +226,7 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 		MaxPlateSpeed: 77.7, OceanicDampening: 0.1 / 3,
 		SubductionDistance: 1234.5, SubductionUplift: 2.0 / 3, ContinentalErosion: 1e-5, SedimentAccretion: 0.7,
 		CollisionPenetration: 123.25, CollisionDistance: 3999.5, CollisionCoefficient: 2.5e-6,
+		RiftingRate: 1.0 / 300,
 	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
@@ -243,7 +250,7 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 		`"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,` +
 		`"oceanic_dampening_km_per_my":0.04,"subduction_distance_km":1800,"subduction_uplift_km_per_my":0.6,` +
 		`"continental_erosion_km_per_my":0.03,"sediment_accretion_km_per_my":0.3,` +
-		`"collision_penetration_km":300,"collision_distance_km":4200,"collision_coefficient_per_km":0.000013}`
+		`"collision_penetration_km":300,"collision_distance_km":4200,"collision_coefficient_per_km":0.000013,"rifting_rate_per_my":0.004}`
 	if string(data) != want {
 		t.Fatalf("DefaultConfig as JSON:\n got %s\nwant %s", data, want)
 	}
@@ -435,9 +442,19 @@ func TestGenerateSimulated(t *testing.T) {
 	orogenyAge := w.Attribute(yaee.AttrOrogenyAge).Float64s
 	orogeny := w.Attribute(yaee.AttrOrogenyType).Uint8s
 	fold := w.Attribute(yaee.AttrFoldDirection).Float64s
+	// Every plate number up to the greatest is in use.
+	used := make([]bool, slices.Max(plate)+1)
+	for _, k := range plate {
+		if k >= 0 {
+			used[k] = true
+		}
+	}
+	if slices.Contains(used, false) {
+		t.Fatalf("a plate number below the greatest, %d, is used by no sample", len(used)-1)
+	}
 	var land int
 	for i := range n {
-		if plate[i] < 0 || int(plate[i]) >= cfg.Plates {
+		if plate[i] < 0 {
 			t.Fatalf("sample %d has plate %d", i, plate[i])
 		}
 		if crust[i] != yaee.CrustOceanic && crust[i] != yaee.CrustContinental {

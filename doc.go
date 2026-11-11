@@ -38,8 +38,9 @@
 // meet, one subducts beneath the other: a trench forms along the front,
 // the overriding plate is raised, and land erodes. Where two continents
 // meet they collide: the smaller leaves its plate and joins the other,
-// and the land on both sides of the suture is raised. Plates do not
-// split yet.
+// and the land on both sides of the suture is raised. From time to
+// time a plate breaks into two to four plates that move apart, which
+// keeps the land from gathering into one continent.
 //
 // The tectonic model is that of
 //
