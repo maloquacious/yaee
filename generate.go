@@ -23,8 +23,8 @@ import (
 // whatever the number of processors. Worlds generated on different
 // architectures may differ.
 //
-// At the default scale Generate uses several hundred megabytes of
-// memory. It may run goroutines, all of which have ended when it
+// At the default scale Generate takes under a second and uses about
+// 200 MB of memory. It may run goroutines, all of which have ended when it
 // returns.
 func Generate(ctx context.Context, cfg Config) (*World, error) {
 	if err := cfg.Validate(); err != nil {

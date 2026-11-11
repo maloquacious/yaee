@@ -275,3 +275,70 @@ func TestTriangleAreas(t *testing.T) {
 		}
 	}
 }
+
+// NewMesh rebuilds, from the points and triangles alone, the same Mesh
+// that Triangulate returned.
+func TestNewMeshMatchesTriangulate(t *testing.T) {
+	for _, points := range [][]Vec{FibonacciPoints(4), FibonacciPoints(6), FibonacciPoints(1000), randomPoints(500, 3)} {
+		want := mustTriangulate(t, points)
+		got, err := NewMesh(points, slices.Clone(want.Tri))
+		if err != nil {
+			t.Fatalf("n=%d: %v", len(points), err)
+		}
+		checkMesh(t, got, false)
+		if !slices.Equal(got.Adj, want.Adj) || !slices.Equal(got.NbrOff, want.NbrOff) || !slices.Equal(got.Nbr, want.Nbr) {
+			t.Fatalf("n=%d: NewMesh and Triangulate disagree", len(points))
+		}
+	}
+}
+
+func TestNewMeshRejectsBadTriangles(t *testing.T) {
+	points := FibonacciPoints(50)
+	good := mustTriangulate(t, points).Tri
+	tests := []struct {
+		name   string
+		change func(tri []int32) []int32
+	}{
+		{"no triangles", func(tri []int32) []int32 { return nil }},
+		{"not a multiple of three", func(tri []int32) []int32 { return tri[:len(tri)-1] }},
+		{"a triangle missing", func(tri []int32) []int32 { return tri[3:] }},
+		{"a triangle twice", func(tri []int32) []int32 { return append(tri, tri[:3]...) }},
+		{"corner out of range", func(tri []int32) []int32 { tri[4] = 50; return tri }},
+		{"negative corner", func(tri []int32) []int32 { tri[4] = -1; return tri }},
+		{"repeated corner", func(tri []int32) []int32 { tri[1] = tri[0]; return tri }},
+		{"one triangle reversed", func(tri []int32) []int32 { tri[0], tri[1] = tri[1], tri[0]; return tri }},
+		{"every triangle reversed", func(tri []int32) []int32 {
+			for i := 0; i < len(tri); i += 3 {
+				tri[i], tri[i+1] = tri[i+1], tri[i]
+			}
+			return tri
+		}},
+		{"a point in no triangle", func(tri []int32) []int32 {
+			// Replace the fan about point 0 by nothing: retarget its
+			// corners to a neighbour, which breaks the surface.
+			for i, p := range tri {
+				if p == 0 {
+					tri[i] = 1
+				}
+			}
+			return tri
+		}},
+	}
+	for _, tt := range tests {
+		if _, err := NewMesh(points, tt.change(slices.Clone(good))); !errors.Is(err, ErrInvalidMesh) {
+			t.Errorf("%s: got %v, want ErrInvalidMesh", tt.name, err)
+		}
+	}
+
+	// Two tetrahedra that touch at point 0 only: every edge has its twin,
+	// but the triangles about point 0 form two fans.
+	pinch := []Vec{{0, 0, 1}, {1, 0, 0}, {0, 1, 0}, {-1, -1, -1}, {-1, 0, 0}, {0, -1, 0}, {1, 1, -1}}
+	for i := range pinch {
+		pinch[i] = pinch[i].Normalize()
+	}
+	tetra := func(a, b, c, d int32) []int32 { return []int32{a, b, c, a, c, d, a, d, b, b, d, c} }
+	tri := append(tetra(0, 1, 2, 3), tetra(0, 4, 5, 6)...)
+	if _, err := NewMesh(pinch, tri); !errors.Is(err, ErrInvalidMesh) {
+		t.Errorf("pinched surface: got %v, want ErrInvalidMesh", err)
+	}
+}

@@ -28,6 +28,9 @@ const (
 	// ErrHemisphere: the centre of the sphere is not strictly inside the
 	// convex hull of the points, so the triangles cannot cover the sphere.
 	ErrHemisphere = cerrs.Error("sphere: points do not surround the centre of the sphere")
+	// ErrInvalidMesh: the triangles given to NewMesh are not a closed,
+	// consistently wound triangulation of the points.
+	ErrInvalidMesh = cerrs.Error("sphere: invalid mesh")
 )
 
 // MaxPoints is the largest number of points Triangulate accepts. It keeps
@@ -38,7 +41,7 @@ const MaxPoints = math.MaxInt32 / 6
 // points it has 2N − 4 triangles and 3N − 6 edges.
 //
 // Points, triangles and edges are identified by number. A Mesh is not
-// changed after Triangulate returns it, so it may be read from many
+// changed after Triangulate or NewMesh returns it, so it may be read from many
 // goroutines at once.
 type Mesh struct {
 	// Points holds the positions that were triangulated. It is the slice
@@ -402,19 +405,28 @@ func (b *builder) legalize(a int32) {
 // neighbours returns each point's neighbours as an offsets slice and an
 // indices slice; see Mesh.NbrOff.
 func (b *builder) neighbours() (off, nbr []int32) {
-	n := len(b.pts)
+	off, nbr, _ = neighbourLists(len(b.pts), b.tri, b.twin)
+	return off, nbr
+}
+
+// neighbourLists builds the neighbour lists of n points from half-edges:
+// tri[e] is the point half-edge e leaves, and twin[e] is the half-edge
+// that runs the other way along the same edge. ok is false if the
+// triangles about some point do not form a single closed fan.
+func neighbourLists(n int, tri, twin []int32) (off, nbr []int32, ok bool) {
 	// Each edge is two half-edges, one leaving each end, so a point has
 	// as many neighbours as half-edges that leave it.
 	off = make([]int32, n+1)
 	leaving := make([]int32, n) // one half-edge that leaves each point
-	for e, p := range b.tri {
+	for e, p := range tri {
 		off[p+1]++
 		leaving[p] = int32(e)
 	}
 	for i := range n {
 		off[i+1] += off[i]
 	}
-	nbr = make([]int32, len(b.tri))
+	nbr = make([]int32, len(tri))
+	ok = true
 	for i := range n {
 		list := nbr[off[i]:off[i+1]]
 		// Turn about the point: from half-edge i→v in triangle (i, v, w),
@@ -422,19 +434,104 @@ func (b *builder) neighbours() (off, nbr []int32) {
 		e := leaving[i]
 		lowest := 0
 		for k := range list {
-			list[k] = b.tri[next(e)]
+			list[k] = tri[next(e)]
 			if list[k] < list[lowest] {
 				lowest = k
 			}
-			e = b.twin[prev(e)]
+			e = twin[prev(e)]
+			// The turn must come back to where it began after passing
+			// every half-edge that leaves the point, and not before.
+			if (e == leaving[i]) != (k == len(list)-1) {
+				ok = false
+			}
+		}
+		if len(list) == 0 {
+			ok = false
 		}
 		// Start the list at the lowest index.
 		rotateLeft(list, lowest)
 	}
-	return off, nbr
+	return off, nbr, ok
 }
 
-// rotateLeft rotates s so that s[k] becomes s[0].
+// NewMesh builds a Mesh from points and triangles that were computed
+// earlier, such as those read from a datafile. tri holds three point
+// indices per triangle, as Mesh.Tri does. NewMesh computes the triangle
+// adjacency and the neighbour lists; the Mesh keeps points and tri, not
+// copies.
+//
+// It returns an error wrapping ErrInvalidMesh unless the triangles form
+// a closed surface in which every point is a corner, every edge joins
+// exactly two triangles that traverse it in opposite directions, the
+// triangles about each point form one fan, and every triangle is
+// counter-clockwise seen from outside the sphere.
+//
+// NewMesh does not check that the triangulation is Delaunay. If it is
+// not, Locator.Nearest may return a point that is not the nearest.
+func NewMesh(points []Vec, tri []int32) (*Mesh, error) {
+	n := len(points)
+	if n > MaxPoints {
+		return nil, fmt.Errorf("%w: got %d, the limit is %d", ErrTooManyPoints, n, MaxPoints)
+	}
+	if len(tri) == 0 || len(tri)%3 != 0 || len(tri) > 6*n {
+		return nil, fmt.Errorf("%w: %d corners for %d points", ErrInvalidMesh, len(tri), n)
+	}
+
+	// Group the half-edges by the point they leave.
+	off := make([]int32, n+1)
+	for e, p := range tri {
+		if p < 0 || int(p) >= n {
+			return nil, fmt.Errorf("%w: triangle %d has corner %d; there are %d points", ErrInvalidMesh, e/3, p, n)
+		}
+		off[p+1]++
+	}
+	for i := range n {
+		off[i+1] += off[i]
+	}
+	byOrigin := make([]int32, len(tri))
+	fill := slices.Clone(off[:n])
+	for e, p := range tri {
+		byOrigin[fill[p]] = int32(e)
+		fill[p]++
+	}
+
+	// The twin of half-edge a→b is the one half-edge b→a.
+	twin := make([]int32, len(tri))
+	for e, a := range tri {
+		b := tri[next(int32(e))]
+		found := int32(-1)
+		for _, f := range byOrigin[off[b]:off[b+1]] {
+			if tri[next(f)] == a {
+				if found >= 0 {
+					return nil, fmt.Errorf("%w: edge %d→%d belongs to more than one triangle", ErrInvalidMesh, b, a)
+				}
+				found = f
+			}
+		}
+		if found < 0 || a == b {
+			return nil, fmt.Errorf("%w: edge %d→%d of triangle %d has no triangle on its other side", ErrInvalidMesh, a, b, e/3)
+		}
+		twin[e] = found
+	}
+
+	for i := 0; i < len(tri); i += 3 {
+		if orient(points[tri[i]], points[tri[i+1]], points[tri[i+2]], Vec{}) <= 0 {
+			return nil, fmt.Errorf("%w: triangle %d is not counter-clockwise seen from outside", ErrInvalidMesh, i/3)
+		}
+	}
+
+	m := &Mesh{Points: points, Tri: tri}
+	var ok bool
+	if m.NbrOff, m.Nbr, ok = neighbourLists(n, tri, twin); !ok {
+		return nil, fmt.Errorf("%w: the triangles about some point do not form one closed fan", ErrInvalidMesh)
+	}
+	m.Adj = twin
+	for i, e := range m.Adj {
+		m.Adj[i] = e / 3
+	}
+	return m, nil
+}
+
 func rotateLeft(s []int32, k int) {
 	slices.Reverse(s[:k])
 	slices.Reverse(s[k:])

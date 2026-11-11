@@ -101,6 +101,7 @@ This departs from the paper, which tracks intersections between boundary triangl
 |---------|----------|
 | `yaee` (root) | `Config`, `DefaultConfig`, `Validate`, `Generate`, `World`, reading and writing the datafile |
 | `internal/sphere` | Vectors, rotations, Fibonacci sampling, triangulation, adjacency, point location |
+| `internal/model` | The working data of a world during generation, the stage interface, per-stage random streams |
 | `internal/noise` | Seeded coherent noise in three dimensions |
 | `internal/tectonics` | Plates, motion, resampling, and the four phenomena |
 | `internal/render` | Check images, drawn from a `World` |
@@ -148,6 +149,8 @@ Done when:
 
 Tracked by [#2](https://github.com/maloquacious/yaee/issues/2), with sub-issues #15 to #17.
 
+**Done** in version 0.8.0-alpha. The code is the root package, `internal/model`, `internal/render`, and `cmd/yaee`; the datafile is specified in [docs/datafile.md](docs/datafile.md).
+
 The public API, the datafile, the command, and images, around a world that is still trivial.
 
 `Config` with seed, radius, sample spacing, duration, and time step. `DefaultConfig` and `Validate`. `Generate` returning a `World` with samples and a placeholder elevation. The datafile format: the native samples, versioned, embedding the `Config` and the library version, with named per-sample attributes so later stages can add to it. Reading and writing it. `cmd/yaee` with a command to generate a world and one to render images from a datafile. An equirectangular elevation image.
@@ -161,6 +164,26 @@ Done when:
 - `Validate` rejects each invalid field with an error naming it.
 - The datafile format is specified in a document under `docs/`, complete enough that a coding agent can write a reader in another language from it alone.
 - The root package imports no image or command-line library.
+
+What was built, where the plan left a choice:
+
+- `Config` encodes to JSON with the unit in each member's name, such as `radius_km`. `Validate` reports every invalid field, one per line, by its Go name.
+- A `World` holds positions, triangles, and a list of attributes. An attribute has a name, a unit, an element type (uint8, int32, float32, or float64), and a component count.
+- Elevation is a placeholder: 4(x² − y²) + 6yz − 1 km at unit position (x, y, z). Milestone 3 replaces it. Nothing is random yet; a test fails when that changes.
+- Stages implement `model.Stage` and work on `model.World`, which holds one slice per attribute. Each stage draws from its own random stream, seeded by the `Config` seed and the hash of the stage's name. `model.ParallelRange` is the parallel loop that keeps output independent of the processor count.
+- The datafile is a header and checksummed sections. It stores positions as float64 and stores the triangles; it does not store neighbour lists, and the specification says how to derive them. It is not compressed. Later stages add attributes or sections without a new format version.
+- `testdata/example.yaee` is a 6-sample world listed byte by byte in the specification. When the generator's output changes, run `go test . -run TestExampleFile -update` to rewrite both.
+- `render` rebuilds its nearest-sample index from the triangles in the file (`sphere.NewMesh`), so an image also shows that the stored triangulation is usable.
+- `yaee generate` requires `-out` or `-write-config`; nothing is written by default. A bare `go run ./cmd/yaee` prints usage and exits with status 2.
+
+Measured at full scale (942,059 samples) on the development machine:
+
+| Measure | Value |
+|---------|-------|
+| `yaee generate` | 0.4 s, 211 MB peak resident memory |
+| Datafile | 52,755,500 bytes |
+| `yaee render` at 2048 × 1024 | 0.4 s, 214 MB peak resident memory |
+| Repeat runs, with `GOMAXPROCS=1` and with the default | Identical datafile and image bytes |
 
 ### 3. Initial plates and crust
 
