@@ -127,6 +127,77 @@ func CrustType(w *yaee.World, width int) (*image.NRGBA, error) {
 	}), nil
 }
 
+// OceanicAge draws the age of the world's oceanic crust as an
+// equirectangular image with the size and layout that Elevation
+// documents. A pixel takes its colour from the sample nearest to its
+// centre: where that sample's crust type is oceanic, AgeColour of its
+// oceanic age; where it is continental, grey (200, 200, 200); for any
+// other crust type, magenta (255, 0, 255).
+//
+// Crust is youngest, and red, on the ridges where it formed, and older
+// in bands to either side.
+func OceanicAge(w *yaee.World, width int) (*image.NRGBA, error) {
+	kind := w.Attribute(yaee.AttrCrustType)
+	if kind == nil || kind.Type != yaee.Uint8 || kind.Components != 1 || len(kind.Uint8s) != w.NumSamples() {
+		return nil, attributeError(w, yaee.AttrCrustType, "uint8")
+	}
+	age := w.Attribute(yaee.AttrOceanicAge)
+	if age == nil || age.Type != yaee.Float64 || age.Components != 1 || len(age.Float64s) != w.NumSamples() {
+		return nil, attributeError(w, yaee.AttrOceanicAge, "float64")
+	}
+	grid, err := nearestSamples(w, width)
+	if err != nil {
+		return nil, err
+	}
+	return paint(grid, width, func(sample int32) color.NRGBA {
+		switch kind.Uint8s[sample] {
+		case yaee.CrustOceanic:
+			return AgeColour(age.Float64s[sample])
+		case yaee.CrustContinental:
+			return color.NRGBA{R: 200, G: 200, B: 200, A: 255}
+		}
+		return color.NRGBA{R: 255, G: 0, B: 255, A: 255}
+	}), nil
+}
+
+// OldestOcean is the age in My at which the colours of AgeColour end.
+const OldestOcean = 250.0
+
+// ageColours are the colours of AgeColour at ages 0, 1/4, 1/2, 3/4, and
+// 1 of OldestOcean, as red, green, blue.
+var ageColours = [5][3]float64{
+	{215, 48, 39},   // red
+	{254, 224, 139}, // yellow
+	{120, 198, 121}, // green
+	{49, 130, 189},  // blue
+	{48, 24, 96},    // violet
+}
+
+// AgeColour returns the colour of an age of oceanic crust in My. It
+// runs through five colours, with a straight line between each and the
+// next:
+//
+//	0 My      (215, 48, 39), red
+//	62.5 My   (254, 224, 139), yellow
+//	125 My    (120, 198, 121), green
+//	187.5 My  (49, 130, 189), blue
+//	250 My    (48, 24, 96), violet; also every age above OldestOcean
+//
+// A negative age or NaN is magenta, (255, 0, 255). Each channel is
+// rounded to the nearest integer. Alpha is always 255.
+func AgeColour(my float64) color.NRGBA {
+	if math.IsNaN(my) || my < 0 {
+		return color.NRGBA{R: 255, G: 0, B: 255, A: 255}
+	}
+	last := len(ageColours) - 1
+	x := min(my/OldestOcean, 1) * float64(last)
+	i := min(int(x), last-1)
+	t := x - float64(i)
+	from, to := ageColours[i], ageColours[i+1]
+	mix := func(c int) uint8 { return uint8(math.Round(from[c] + (to[c]-from[c])*t)) }
+	return color.NRGBA{R: mix(0), G: mix(1), B: mix(2), A: 255}
+}
+
 // attributeError describes a missing or unusable attribute.
 func attributeError(w *yaee.World, name, want string) error {
 	a := w.Attribute(name)

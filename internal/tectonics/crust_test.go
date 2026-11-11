@@ -213,11 +213,21 @@ func TestInitialOceanicAge(t *testing.T) {
 		const steps = 200000
 		dt := age / steps
 		for range steps {
-			z -= (1 - z/params.TrenchElevation) * oceanicDampening * dt
+			z -= (1 - z/params.TrenchElevation) * params.OceanicDampening * dt
 		}
 		if math.Abs(z-params.AbyssalElevation) > 1e-4 {
 			t.Errorf("dampening for %v My takes z_r = %v to %v, want z_a = %v", age, params.RidgeElevation, z, params.AbyssalElevation)
 		}
+	}
+
+	// Twice the dampening, half the time; none, no age.
+	params.OceanicDampening = 0.08
+	if got := InitialOceanicAge(params); math.Abs(got-age/2) > 1e-9 {
+		t.Errorf("with twice the dampening InitialOceanicAge = %v, want %v", got, age/2)
+	}
+	params.OceanicDampening = 0
+	if got := InitialOceanicAge(params); got != 0 {
+		t.Errorf("with no dampening InitialOceanicAge = %v, want 0", got)
 	}
 }
 

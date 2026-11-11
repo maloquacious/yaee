@@ -23,9 +23,9 @@ import (
 // whatever the number of processors. Worlds generated on different
 // architectures may differ.
 //
-// At the default scale Generate takes about 5 seconds on ten processors
-// and uses about 560 MB of memory. It may run goroutines, all of which have ended when it
-// returns.
+// At the default scale Generate takes about 6 seconds on ten processors
+// and uses about 570 MB of memory. It may run goroutines, all of which
+// have ended when it returns.
 func Generate(ctx context.Context, cfg Config) (*World, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -56,6 +56,8 @@ func Generate(ctx context.Context, cfg Config) (*World, error) {
 		MaxContinentalElevation: cfg.MaxContinentalElevation,
 
 		MaxPlateSpeed: cfg.MaxPlateSpeed,
+
+		OceanicDampening: cfg.OceanicDampening,
 	})
 	if err := model.Run(ctx, mw, cfg.Seed, stages()); err != nil {
 		return nil, err

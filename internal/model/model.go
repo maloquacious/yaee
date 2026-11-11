@@ -41,6 +41,8 @@ type Params struct {
 	MaxContinentalElevation float64 // km; z_c
 
 	MaxPlateSpeed float64 // km/My; v0 of the paper's Table 3
+
+	OceanicDampening float64 // km/My; ε_o of the paper's Table 3
 }
 
 // Values of World.CrustType.

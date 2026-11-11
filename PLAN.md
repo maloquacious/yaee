@@ -30,7 +30,8 @@ A default run is an Earth-like world at about 25 km per data point:
 
 **Time budget:** a default run finishes in under 2 minutes on the development machine (Apple M4, 10 processors).
 Revised after milestone 4, which measured 4.4 s for a default run: 1.2 s to build the sphere and the initial world, then at most 50 resamplings of 76 ms each; a step between resamplings costs under a microsecond.
-Milestones 5 to 8 add work to every step and every resampling. The budget allows each of the 125 steps about a second, which is twelve times a resampling today.
+Milestone 5 brought a default run to 6.3 s.
+Milestones 6 to 8 add work to every step and every resampling. The budget allows each of the 125 steps about a second, which is twelve times a resampling today.
 For comparison, the paper reports 1.9 s per step plus 13 s per resampling at 500,000 samples.
 
 ## Decisions
@@ -241,7 +242,7 @@ What was built, where the paper and the plan left a choice:
 - A triangle whose corners are in different plates is divided between them: a point belongs to the plate of its nearest corner (greatest barycentric weight). A plate's data at a point is interpolated from the triangle's corners that are in that plate.
 - Resampling happens when the fastest sample has moved 500 km since the last one, and after the last step. The paper's rule is a count of steps that amounts to 2000 km or more.
 - Interpolation: scalars are blended; vectors are blended, turned with the plate, and projected onto the tangent plane; crust type and orogeny type come from the nearest corner. Each resampling adds an error proportional to the square of the sample spacing.
-- Placeholders: a gap between plates gets new oceanic crust at z_r with age 0, and joins the nearest plate (milestone 5 replaces this). Where plates overlap, continental crust is kept over oceanic, then the lowest-numbered plate (milestone 6 replaces this).
+- Placeholders: a gap between plates gets new oceanic crust at z_r with age 0, and joins the nearest plate (replaced in milestone 5). Where plates overlap, continental crust is kept over oceanic, then the lowest-numbered plate (milestone 6 replaces this).
 - After a resampling a plate may be in several pieces or have no samples. A plate whose fastest sample would exceed v0 after gaining samples has its angular speed lowered to the limit.
 - `Duration` 0 gives the initial world. A `Duration` that is not a multiple of `TimeStep` ends with a shorter step. A run may have at most 1,000,000 steps.
 - Plate axes and speeds are not written to the datafile. It holds per-sample data only.
@@ -260,6 +261,8 @@ Measured at full scale (942,059 samples, 250 My, 125 steps) on the development m
 
 Tracked by [#5](https://github.com/maloquacious/yaee/issues/5).
 
+**Done** in version 0.14.0-alpha. The code is `internal/tectonics/ocean.go` (`AgeOcean`, `RidgeProfile`, and the gap filling of `Resample`) and `render.OceanicAge`.
+
 Crust generated in the gaps between diverging plates (§4.3): distance to the ridge and to the nearest plate, the blend between interpolated elevation and the ridge profile, crust age, ridge direction. Oceanic dampening (§4.5), so that crust sinks toward the abyssal plain as it ages. Images of crust age.
 
 Done when:
@@ -269,6 +272,29 @@ Done when:
 - Ridge direction is parallel to the ridge.
 - Dampening follows its closed-form solution: elevation approaches the trench elevation z_t with a time constant of 250 My, and never passes it. Abyssal plains near z_a are what 200 My of that gives; z_a is not a floor.
 - No sample is left without crust after a resampling.
+
+What was built, where the paper and the plan left a choice:
+
+- The ridge is not traced as a line. Each gap sample finds its nearest border sample and its nearest border sample of another plate, at distances d_a ≤ d_b, by spreading the border samples through the gap. The ridge is where d_a = d_b, so with three or more plates round a gap it is the lines along which the two nearest plates are equally near. The distance to the ridge is taken as (d_b − d_a)/2, which makes the paper's α equal to (d_b − d_a)/(d_b + d_a).
+- The age of new crust is α times the time since the last resampling: the gap opened steadily over that time, so this is the distance from the ridge divided by the speed at which the plate leaves it.
+- The template ridge profile z_Γ is the dampening curve: the elevation of crust that formed at z_r and has been dampened for the sample's age. It is z_r on the ridge.
+- New oceanic crust is never above sea level: border elevations above 0 count as 0 in the interpolated elevation z̄. The paper takes them as they are.
+- Ridge direction is the paper's (p − q) × p, with the direction from the ridge taken from the two nearest border samples and averaged three times over neighbouring gap samples. Without the averaging it is uneven by 5° on average.
+- A gap that only one plate borders has no ridge. It closes with the plate's elevation and the age of the gap.
+- Dampening is the paper's formula as written, an explicit Euler step, applied with the ageing every time step. It is 0.013 km from the closed form after 250 My. A step too long for the formula lands on z_t. `OceanicDampening` (ε_o, default 0.04 km/My) is a `Config` field.
+- Resampling no longer blends oceanic with continental crust. Before, oceanic age near a coast was averaged with the 0 of continental crust, and land at a coast was pulled below sea level by the deep ocean beside it. The paper blends across the coast.
+- The initial ocean keeps sinking, as the formula says: from z_a to −8.5 km after 250 My. Whether the default world should start with younger ocean is for milestone 9.
+- `yaee render -kind age` draws oceanic age.
+
+Measured at full scale (942,059 samples, 250 My, 125 steps, 42 resamplings) on the development machine:
+
+| Measure | Value |
+|---------|-------|
+| `yaee generate` | 6.3 s, 571 MB peak resident memory; 19.3 s with `GOMAXPROCS=1` |
+| Datafile | 126,236,629 bytes |
+| Runs with `GOMAXPROCS=1` and with the default | Identical datafile bytes |
+
+Seen in the age image of seed 1: bands parallel to the ridges, youngest on the ridge. Also the footprints recorded in [#6](https://github.com/maloquacious/yaee/issues/6), which come from the overlap placeholder, and rows of teeth along some plate boundaries, whose cause has not been traced; check both again after milestone 6.
 
 ### 6. Subduction
 

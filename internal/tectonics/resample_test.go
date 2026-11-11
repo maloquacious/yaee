@@ -66,9 +66,9 @@ func decorate(w *model.World) {
 	}
 }
 
-func resample(t testing.TB, w *model.World) {
+func resample(t testing.TB, w *model.World, elapsed float64) {
 	t.Helper()
-	if err := Resample(t.Context(), w); err != nil {
+	if err := Resample(t.Context(), w, elapsed); err != nil {
 		t.Fatalf("Resample: %v", err)
 	}
 }
@@ -83,7 +83,7 @@ func TestResampleAtRest(t *testing.T) {
 	before := snap(w)
 	for range 3 {
 		Advance(w, 2)
-		resample(t, w)
+		resample(t, w, 2)
 		checkCrust(t, w)
 		if !snap(w).equal(before) {
 			t.Fatal("resampling changed a world in which nothing moves")
@@ -95,18 +95,28 @@ func TestResampleAtRest(t *testing.T) {
 	w = moving(t, 6000, 3, earth())
 	decorate(w)
 	before = snap(w)
-	resample(t, w)
+	resample(t, w, 2)
 	if !snap(w).equal(before) {
 		t.Fatal("resampling changed a world before any plate had moved")
 	}
+	// The simulation then only ages the ocean.
 	w = moving(t, 6000, 3, params)
 	decorate(w)
-	before = snap(w)
+	aged := moving(t, 6000, 3, params)
+	decorate(aged)
+	for range 125 {
+		if err := AgeOcean(t.Context(), aged, 2); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if n, err := simulate(t.Context(), w, 500); err != nil || n != 0 {
 		t.Fatalf("simulate: %d resamplings, error %v; want none", n, err)
 	}
-	if !snap(w).equal(before) {
-		t.Fatal("the simulation changed a world in which nothing moves")
+	if !snap(w).equal(snap(aged)) {
+		t.Fatal("the simulation did more than age the ocean of a world in which nothing moves")
+	}
+	if snap(w).equal(before) {
+		t.Fatal("the simulation did not age the ocean")
 	}
 }
 
@@ -153,7 +163,7 @@ func carry(t testing.TB, n int) (scalarErr, vectorErr, tangentErr float64) {
 	}
 	for range turns {
 		Advance(w, dt)
-		resample(t, w)
+		resample(t, w, 2)
 	}
 	// What is at q now was at q turned back by the whole rotation, and
 	// its vectors have turned with the plate.
@@ -232,7 +242,7 @@ func TestResampleRidgeDirection(t *testing.T) {
 	}
 	for range 5 {
 		Advance(w, 2)
-		resample(t, w)
+		resample(t, w, 2)
 	}
 	checkCrust(t, w)
 	total := sphere.NewRotation(axis, angle)
@@ -280,8 +290,14 @@ func TestResampleMovingPlates(t *testing.T) {
 				}
 			}
 
-			resample(t, w)
+			resample(t, w, 6)
 			checkCrust(t, w)
+			held := make([]bool, w.NumPlates) // plates that hold a sample's position
+			for _, hs := range holders {
+				for _, h := range hs {
+					held[h.plate] = true
+				}
+			}
 			for i := range w.Mesh.Points {
 				k := w.Plate[i]
 				if k < 0 || int(k) >= w.NumPlates {
@@ -290,13 +306,15 @@ func TestResampleMovingPlates(t *testing.T) {
 				switch len(holders[i]) {
 				case 0:
 					gaps++
-					if w.CrustType[i] != model.Oceanic || w.Elevation[i] != w.RidgeElevation || w.Thickness[i] != 7 ||
-						w.OceanicAge[i] != 0 || w.OrogenyType[i] != model.OrogenyNone {
-						t.Fatalf("seed %d, round %d: sample %d in a gap did not get new oceanic crust", seed, round, i)
+					// New oceanic crust, no older than the gap and not
+					// above sea level, in a plate that holds something.
+					if w.CrustType[i] != model.Oceanic || w.Thickness[i] != 7 || w.OrogenyType[i] != model.OrogenyNone ||
+						w.OceanicAge[i] > 6 || w.Elevation[i] > 0 || w.FoldDirection[i] != (sphere.Vec{}) {
+						t.Fatalf("seed %d, round %d: sample %d in a gap did not get new oceanic crust: age %v, elevation %v",
+							seed, round, i, w.OceanicAge[i], w.Elevation[i])
 					}
-					// Its plate is that of one of its neighbours.
-					if !slices.ContainsFunc(w.Mesh.Neighbours(i), func(j int32) bool { return w.Plate[j] == k }) {
-						t.Fatalf("seed %d, round %d: gap sample %d has plate %d, which none of its neighbours has", seed, round, i, k)
+					if !held[k] {
+						t.Fatalf("seed %d, round %d: gap sample %d has plate %d, which holds no sample", seed, round, i, k)
 					}
 					continue
 				case 1:
@@ -396,7 +414,7 @@ func TestPlateCaps(t *testing.T) {
 	if !math.IsInf(cosine[3], 1) {
 		t.Errorf("an empty plate's cap has cosine %v, want +Inf", cosine[3])
 	}
-	resample(t, w)
+	resample(t, w, 2)
 	if slices.Contains(w.Plate, 3) {
 		t.Error("an empty plate gained samples")
 	}
@@ -508,7 +526,7 @@ func TestSimulateCancelled(t *testing.T) {
 		t.Fatalf("Simulation: got %v, want context.Canceled", err)
 	}
 	Advance(w, 2)
-	if err := Resample(ctx, w); err != context.Canceled {
+	if err := Resample(ctx, w, 2); err != context.Canceled {
 		t.Fatalf("Resample: got %v, want context.Canceled", err)
 	}
 }

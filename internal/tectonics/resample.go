@@ -26,14 +26,19 @@ import (
 //  2. If one plate holds q, the sample takes that plate's crust,
 //     interpolated from the corners of the triangle with the weights
 //     Query returns:
+//     - crust type and orogeny type are those of the corner with the
+//     greatest weight (the lowest-numbered sample among equals);
+//     - the weight of every corner whose crust type is not that one is
+//     then made 0, and the weights are scaled to sum to 1 again, so
+//     that oceanic and continental crust are never blended: the coast
+//     stays a step in elevation and thickness, and oceanic age is not
+//     averaged with the 0 of continental crust;
 //     - thickness, elevation, oceanic age, and orogeny age are the
 //     weighted sums of the corners' values;
 //     - ridge direction and fold direction are the weighted sums of the
 //     corners' vectors, turned by the plate's rotation and projected
 //     onto the tangent plane at q; the ridge direction is then scaled
-//     to length 1, or set to zero if it is shorter than 10⁻⁹;
-//     - crust type and orogeny type are those of the corner with the
-//     greatest weight (the lowest-numbered sample among equals).
+//     to length 1, or set to zero if it is shorter than 10⁻⁹.
 //     Then the values that do not apply are made neutral: oceanic age 0
 //     and ridge direction zero on continental crust, and orogeny age 0
 //     where the orogeny type is none. If the plate has not turned and q
@@ -43,15 +48,10 @@ import (
 //     from one of them as in step 2, a plate whose crust at q is
 //     continental before one whose crust is oceanic, and the
 //     lowest-numbered plate among those.
-//  4. If no plate holds q, the plates have diverged. Placeholder,
-//     replaced by oceanic crust generation in issue #5: the sample gets
-//     new oceanic crust, 7 km thick, at the ridge elevation z_r, of age
-//     0, with no ridge direction, orogeny, or fold.
+//  4. If no plate holds q, the plates have diverged, and the sample is
+//     in a gap. It gets new oceanic crust; see "Oceanic crust" below.
 //
-// Each sample then belongs to the plate its crust came from. A sample
-// of step 4 belongs to the plate of the nearest sample of steps 2 and
-// 3, counted in steps between neighbours, working outward in order of
-// sample number; if there is no such sample it belongs to plate 0.
+// Each sample then belongs to the plate its crust came from.
 //
 //  5. A plate whose fastest sample would now move faster than
 //     MaxPlateSpeed has its angular speed lowered until that sample
@@ -64,12 +64,80 @@ import (
 //
 // Interpolation is linear, so each resampling blurs the crust a little:
 // the error it adds to a smooth field is proportional to the square of
-// the sample spacing.
+// the sample spacing. The paper interpolates across the coast as well
+// (§6, "barycentric interpolation of crust data"); keeping the two
+// crust types apart is ours.
+//
+// # Oceanic crust
+//
+// The samples of step 4 get the crust that formed at the ridges since
+// the last resampling, elapsed My ago (§4.3). A border sample is a
+// sample of steps 2 and 3 with a neighbour in a gap. For a gap sample
+// at q:
+//
+//   - a is the nearest border sample that can be reached through the
+//     gap, at the angle d_a from q, and A its plate;
+//   - b is the nearest border sample of any other plate that can be
+//     reached through the gap, at the angle d_b ≥ d_a;
+//   - the ridge Γ is where d_a = d_b: the line midway between the two
+//     nearest plates. Where three or more plates border a gap the ridge
+//     is therefore the lines along which the two nearest plates are
+//     equally near, which meet where three are;
+//   - the distance to the nearest plate is d_P = d_a, and the distance
+//     to the ridge is taken as d_Γ = (d_b − d_a)/2, which is exact
+//     between straight parallel plate edges, so the paper's
+//     α = d_Γ/(d_Γ + d_P) is (d_b − d_a)/(d_b + d_a): 0 on the ridge
+//     and 1 at plate A;
+//   - z̄ = (d_b · z(a) + d_a · z(b))/(d_a + d_b), the elevation
+//     interpolated between the plates, with z(a) and z(b) the
+//     elevations of a and b, or 0 where they are above sea level;
+//   - the age is α · elapsed. The gap opened at a steady speed since
+//     the last resampling, so crust at the fraction α of the way from
+//     the ridge to the plate formed that fraction of the time ago. This
+//     is the distance from the ridge divided by the speed at which the
+//     plate leaves the ridge, without needing the speed;
+//   - the elevation is α · z̄ + (1 − α) · z_Γ, the paper's blend, with
+//     z_Γ = RidgeProfile at the sample's age;
+//   - the ridge direction is s × q scaled to length 1, with s the
+//     direction of spreading at q: the sum of the unit tangent vector
+//     pointing away from b and the unit tangent vector pointing toward
+//     a, scaled to length 1, and then averaged three times over the
+//     sample and its neighbours in the gap (a neighbour's s is negated
+//     first if it points away from the sample's, as it does across a
+//     ridge). s is the direction in which d_b − d_a grows fastest, so
+//     it is at right angles to the ridge, as the paper's q − q′ is, with
+//     q′ the projection of q onto the ridge, and s × q is the paper's
+//     r = (q − q′) × q. The averaging is ours: a and b are whichever
+//     samples of an uneven plate edge are nearest, and without it the
+//     direction is uneven by 5° on average and over 20° at worst. The
+//     direction is zero if a vector along the way is shorter than 10⁻⁹;
+//   - the crust is oceanic, 7 km thick, with no orogeny and no fold;
+//   - the sample joins plate A, so the ridge becomes the boundary
+//     between the plates.
+//
+// Angles are great-circle angles between sample positions. The nearest
+// border samples are found by spreading them outward from the border
+// through neighbouring gap samples, nearest first; a gap sample keeps
+// the first it is offered and the first of another plate. Ties go to the
+// lower-numbered border sample.
+//
+// If only one plate can be reached through the gap, there is no ridge:
+// α is 1, so the sample takes the elevation of a, or 0 if that is above
+// sea level, and the age elapsed, and has no ridge direction. If no
+// sample is held by any plate, every sample gets the ridge elevation
+// z_r, age 0, and plate 0.
+//
+// New oceanic crust is never above sea level. The paper's z̄ takes the
+// border elevations as they are, which next to high land would make
+// ocean floor that is land.
 //
 // This departs from the paper, which resamples by intersecting the
 // boundary triangles of the plates, found with a bounding box hierarchy
 // (§6). See PLAN.md, "Finding what is at a point".
-func Resample(ctx context.Context, w *model.World) error {
+//
+// elapsed is the time in My since the last resampling, or since the
+// start. It must be at least 0.
+func Resample(ctx context.Context, w *model.World, elapsed float64) error {
 	mesh := w.Mesh
 	n := len(mesh.Points)
 
@@ -128,11 +196,7 @@ func Resample(ctx context.Context, w *model.World) error {
 
 			next.Plate[i] = plate
 			if plate < 0 {
-				// Step 4. Placeholder for oceanic crust generation (#5).
-				next.CrustType[i] = model.Oceanic
-				next.Thickness[i] = oceanicThickness
-				next.Elevation[i] = w.RidgeElevation
-				continue // the rest is zero
+				continue // step 4, below
 			}
 
 			// Step 2.
@@ -149,6 +213,18 @@ func Resample(ctx context.Context, w *model.World) error {
 				continue
 			}
 			a, b, c := corners[0], corners[1], corners[2]
+			var kept float64
+			for j, corner := range corners {
+				if w.CrustType[corner] != w.CrustType[s] {
+					weights[j] = 0
+				}
+				kept += weights[j]
+			}
+			if kept != 1 {
+				for j := range weights {
+					weights[j] /= kept
+				}
+			}
 			blend := func(x []float64) float64 {
 				return weights[0]*x[a] + weights[1]*x[b] + weights[2]*x[c]
 			}
@@ -176,25 +252,7 @@ func Resample(ctx context.Context, w *model.World) error {
 		return err
 	}
 
-	// Give the samples of step 4 to the plates around them.
-	queue := make([]int32, 0, n)
-	for i, k := range next.Plate {
-		if k >= 0 {
-			queue = append(queue, int32(i))
-		}
-	}
-	if len(queue) == 0 {
-		clear(next.Plate) // all to plate 0
-	}
-	for head := 0; head < len(queue) && len(queue) < n; head++ {
-		i := queue[head]
-		for _, j := range mesh.Neighbours(int(i)) {
-			if next.Plate[j] < 0 {
-				next.Plate[j] = next.Plate[i]
-				queue = append(queue, j)
-			}
-		}
-	}
+	fillGaps(mesh, w.Params, &next, elapsed) // step 4
 	if err := ctx.Err(); err != nil {
 		return err
 	}

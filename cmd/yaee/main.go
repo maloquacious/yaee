@@ -205,6 +205,7 @@ func generateCommand() *command {
 		trench      = fs.Float64("trench-elevation", def.TrenchElevation, "Elevation of the deepest oceanic trench, in `km`. Less than -abyssal-elevation.")
 		maxCont     = fs.Float64("max-continental-elevation", def.MaxContinentalElevation, "Highest elevation of continental crust, in `km`. Greater than 0.")
 		maxSpeed    = fs.Float64("max-plate-speed", def.MaxPlateSpeed, "Greatest speed of any point of a plate, in `km/My` (equal to mm/y). At least 0; 0 gives plates that do not move.")
+		dampening   = fs.Float64("oceanic-dampening", def.OceanicDampening, "Rate at which oceanic crust at sea level sinks as it ages, in `km/My` (equal to mm/y). At least 0; 0 gives oceanic crust that does not sink.")
 		outPath     = fs.String("out", "", "Write the datafile to this `file`, replacing it if it exists.")
 		writeConfig = fs.String("write-config", "", "Write the effective Config as JSON to this `file`, or to standard output if the value is \"-\".")
 		verbose     = fs.Bool("v", false, "Print the sample count, file size, and timings to standard error.")
@@ -217,7 +218,7 @@ and no -out, the Config is checked and written and no world is generated.
 
 The effective Config is the default Config, then the members of the
 -config file, then each of the flags from -seed to
--max-plate-speed that is given. The defaults shown above are
+-oceanic-dampening that is given. The defaults shown above are
 the default Config: an Earth-like world of 942059 samples. An invalid
 Config is reported with the name of each invalid field, and nothing is
 written.
@@ -225,7 +226,7 @@ written.
 The Config file is one JSON object. This is the default Config:
 %s
 The same Config gives the same datafile, byte for byte, on the same CPU
-architecture. The default world takes about 5 seconds to generate on
+architecture. The default world takes about 6 seconds to generate on
 ten processors, and its datafile is about 126 MB. -duration 0 gives the
 initial world, before any plate has moved.
 
@@ -293,6 +294,9 @@ Example:
 			}
 			if wasSet(fs, "max-plate-speed") {
 				cfg.MaxPlateSpeed = *maxSpeed
+			}
+			if wasSet(fs, "oceanic-dampening") {
+				cfg.OceanicDampening = *dampening
 			}
 			if err := cfg.Validate(); err != nil {
 				return err
@@ -369,6 +373,13 @@ so black lines trace the plate boundaries.
 -kind crust colours by the "crust_type" attribute: oceanic crust is
 blue (40, 90, 160) and continental crust is tan (190, 170, 110).
 
+-kind age colours oceanic crust by the "oceanic_age" attribute, and
+continental crust grey (200, 200, 200). The colour runs in straight
+lines from red (215, 48, 39) at 0 My through yellow (254, 224, 139) at
+62.5 My, green (120, 198, 121) at 125 My, and blue (49, 130, 189) at
+187.5 My to violet (48, 24, 96) at 250 My and above. Crust is youngest
+on the ridges where it formed.
+
 A datafile without the attribute a kind needs is an error.
 
 The same datafile and width give the same PNG, byte for byte.
@@ -430,6 +441,7 @@ func defaultConfigJSON() string {
 
 // kinds maps each value of render's -kind flag to what draws it.
 var kinds = map[string]func(*yaee.World, int) (*image.NRGBA, error){
+	"age":       render.OceanicAge,
 	"crust":     render.CrustType,
 	"elevation": render.Elevation,
 	"plates":    render.Plates,

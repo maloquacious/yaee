@@ -382,3 +382,94 @@ func TestCrustType(t *testing.T) {
 		t.Errorf("no crust_type attribute: got %v, want ErrNoAttribute", err)
 	}
 }
+
+func TestAgeColour(t *testing.T) {
+	for _, c := range []struct {
+		my   float64
+		want color.NRGBA
+	}{
+		{0, color.NRGBA{215, 48, 39, 255}},
+		{62.5, color.NRGBA{254, 224, 139, 255}},
+		{125, color.NRGBA{120, 198, 121, 255}},
+		{187.5, color.NRGBA{49, 130, 189, 255}},
+		{250, color.NRGBA{48, 24, 96, 255}},
+		{1e9, color.NRGBA{48, 24, 96, 255}},
+		{math.Inf(1), color.NRGBA{48, 24, 96, 255}},
+		{31.25, color.NRGBA{235, 136, 89, 255}}, // halfway from red to yellow
+		{-1, color.NRGBA{255, 0, 255, 255}},
+		{math.NaN(), color.NRGBA{255, 0, 255, 255}},
+	} {
+		if got := AgeColour(c.my); got != c.want {
+			t.Errorf("AgeColour(%v) = %v, want %v", c.my, got, c.want)
+		}
+	}
+}
+
+func TestOceanicAge(t *testing.T) {
+	const width = 128
+	w := world(t, 4000, func(x, y, z float64) float64 { return 0 })
+	// Land north of 30° north; south of it ocean whose age grows with
+	// the distance south, from 0 to 250 My at the south pole.
+	crust := w.Attribute(yaee.AttrCrustType).Uint8s
+	age := w.Attribute(yaee.AttrOceanicAge).Float64s
+	ageAt := func(z float64) float64 { return (0.5 - z) / 1.5 * 250 }
+	for i, p := range w.Positions {
+		crust[i], age[i] = yaee.CrustOceanic, ageAt(p[2])
+		if p[2] > 0.5 {
+			crust[i], age[i] = yaee.CrustContinental, 0
+		}
+	}
+	img, err := OceanicAge(w, width)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := img.Bounds(); b.Dx() != width || b.Dy() != width/2 {
+		t.Fatalf("image is %dx%d, want %dx%d", b.Dx(), b.Dy(), width, width/2)
+	}
+	near := func(a, b color.NRGBA) bool {
+		d := func(x, y uint8) int { return max(int(x), int(y)) - min(int(x), int(y)) }
+		return d(a.R, b.R) <= 30 && d(a.G, b.G) <= 30 && d(a.B, b.B) <= 30
+	}
+	for row := range width / 2 {
+		for col := range width {
+			_, _, z := pixelCentre(col, row, width)
+			got := img.NRGBAAt(col, row)
+			switch {
+			case math.Abs(z-0.5) < 0.1: // either side of the coast
+			case z > 0.5:
+				if got != (color.NRGBA{200, 200, 200, 255}) {
+					t.Fatalf("pixel (%d, %d) on land is %v, want grey", col, row, got)
+				}
+			default:
+				// The nearest sample is within a spacing of the pixel, which
+				// is 10 My of age and up to 30 in a colour channel.
+				if want := AgeColour(ageAt(z)); !near(got, want) {
+					t.Fatalf("pixel (%d, %d) at z = %v is %v, want about %v", col, row, z, got, want)
+				}
+			}
+		}
+	}
+
+	for i := range crust {
+		crust[i] = 7
+	}
+	img, err = OceanicAge(w, 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := img.NRGBAAt(3, 3), (color.NRGBA{255, 0, 255, 255}); got != want {
+		t.Errorf("an unknown crust type is drawn %v, want %v", got, want)
+	}
+
+	if _, err := OceanicAge(w, 15); !errors.Is(err, ErrWidth) {
+		t.Errorf("odd width: got %v, want ErrWidth", err)
+	}
+	w.Attribute(yaee.AttrOceanicAge).Name = "renamed"
+	if _, err := OceanicAge(w, 16); !errors.Is(err, ErrNoAttribute) {
+		t.Errorf("no oceanic_age attribute: got %v, want ErrNoAttribute", err)
+	}
+	w.Attributes = w.Attributes[:1] // the plate attribute only
+	if _, err := OceanicAge(w, 16); !errors.Is(err, ErrNoAttribute) {
+		t.Errorf("no crust_type attribute: got %v, want ErrNoAttribute", err)
+	}
+}

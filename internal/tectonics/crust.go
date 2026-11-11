@@ -59,11 +59,6 @@ const (
 	// oceanic crust and 35 km for continental crust.
 	oceanicThickness     = 7.0
 	continentalThickness = 35.0
-
-	// oceanicDampening is ε_o of the paper's Table 3, in km/My (the
-	// table gives 4 × 10⁻² mm/y). It is used here only to give the
-	// initial ocean an age that agrees with its elevation.
-	oceanicDampening = 0.04
 )
 
 // Crust is the stage that sets the initial crust: every parameter of the
@@ -118,7 +113,8 @@ const (
 // elevation z_r, the highest the paper gives oceanic crust, at the
 // coast. Its age is the time the paper's oceanic dampening (§4.5) takes
 // to lower crust from z_r to z_a, so that age and elevation agree where
-// the simulation takes over: 203 My with the defaults. No ridge exists
+// the simulation takes over: 203 My with the defaults, and 0 if
+// OceanicDampening is 0. No ridge exists
 // yet, so no sample has a ridge direction; no mountain has been raised,
 // so no sample has an orogeny or a fold.
 type Crust struct{}
@@ -238,10 +234,14 @@ func (Crust) Run(ctx context.Context, w *model.World, rng *rand.Rand) error {
 //	dz/dt = −(1 − z/z_t) · ε_o,
 //
 // takes to lower crust from the ridge elevation z_r to the abyssal
-// elevation z_a, which is (z_t/ε_o) · ln((z_a − z_t)/(z_r − z_t)). With
-// the paper's constants it is 202.7 My.
+// elevation z_a, which is (z_t/ε_o) · ln((z_a − z_t)/(z_r − z_t)), with
+// ε_o the parameter OceanicDampening. With the paper's constants it is
+// 202.7 My. With ε_o = 0 no age lowers crust that far, and the age is 0.
 func InitialOceanicAge(p model.Params) float64 {
-	return p.TrenchElevation / oceanicDampening *
+	if p.OceanicDampening == 0 {
+		return 0
+	}
+	return p.TrenchElevation / p.OceanicDampening *
 		math.Log((p.AbyssalElevation-p.TrenchElevation)/(p.RidgeElevation-p.TrenchElevation))
 }
 

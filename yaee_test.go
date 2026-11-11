@@ -43,7 +43,7 @@ func TestDefaultConfig(t *testing.T) {
 		Seed: 0, Radius: 6370, SampleSpacing: 25, Duration: 250, TimeStep: 2,
 		Plates: 40, PlateWarpAmplitude: 1500, PlateWarpFeatureSize: 2500,
 		LandCoverage: 0.3, RidgeElevation: -1, AbyssalElevation: -6, TrenchElevation: -10, MaxContinentalElevation: 10,
-		MaxPlateSpeed: 100,
+		MaxPlateSpeed: 100, OceanicDampening: 0.04,
 	}
 	if cfg != want {
 		t.Fatalf("DefaultConfig() = %+v, want %+v", cfg, want)
@@ -56,15 +56,16 @@ func TestZeroConfigInvalid(t *testing.T) {
 		t.Fatalf("zero Config: got %v, want ErrInvalidConfig", err)
 	}
 	// Zero is legitimate for Seed, Duration, PlateWarpAmplitude,
-	// LandCoverage, and MaxPlateSpeed, and for nothing else. A zero TrenchElevation is
-	// invalid only because it is not below the AbyssalElevation.
+	// LandCoverage, MaxPlateSpeed, and OceanicDampening, and for nothing
+	// else. A zero TrenchElevation is invalid only because it is not
+	// below the AbyssalElevation.
 	for _, field := range []string{"Radius", "SampleSpacing", "TimeStep", "Plates", "PlateWarpFeatureSize",
 		"RidgeElevation", "AbyssalElevation", "TrenchElevation", "MaxContinentalElevation"} {
 		if !strings.Contains(err.Error(), ": "+field+": ") {
 			t.Errorf("error does not name %s: %v", field, err)
 		}
 	}
-	for _, field := range []string{"Seed", "Duration", "PlateWarpAmplitude", "LandCoverage", "MaxPlateSpeed"} {
+	for _, field := range []string{"Seed", "Duration", "PlateWarpAmplitude", "LandCoverage", "MaxPlateSpeed", "OceanicDampening"} {
 		if strings.Contains(err.Error(), ": "+field+": ") {
 			t.Errorf("error names %s, whose zero is valid: %v", field, err)
 		}
@@ -119,6 +120,9 @@ func TestValidateNamesField(t *testing.T) {
 		{"MaxPlateSpeed", func(c *yaee.Config) { c.MaxPlateSpeed = -1 }},
 		{"MaxPlateSpeed", func(c *yaee.Config) { c.MaxPlateSpeed = nan }},
 		{"MaxPlateSpeed", func(c *yaee.Config) { c.MaxPlateSpeed = inf }},
+		{"OceanicDampening", func(c *yaee.Config) { c.OceanicDampening = -0.01 }},
+		{"OceanicDampening", func(c *yaee.Config) { c.OceanicDampening = nan }},
+		{"OceanicDampening", func(c *yaee.Config) { c.OceanicDampening = inf }},
 		{"Duration", func(c *yaee.Config) { c.Duration = 2*yaee.MaxSteps + 1 }},
 		{"Duration", func(c *yaee.Config) { c.Duration = 1; c.TimeStep = 1e-7 }},
 		{"SampleSpacing", func(c *yaee.Config) { c.SampleSpacing = 1e-300 }},
@@ -160,6 +164,8 @@ func TestValidateAcceptsBoundaries(t *testing.T) {
 		func(c *yaee.Config) { c.LandCoverage = 0 },
 		func(c *yaee.Config) { c.LandCoverage = 1 },
 		func(c *yaee.Config) { c.MaxPlateSpeed = 0 },
+		func(c *yaee.Config) { c.OceanicDampening = 0 },
+		func(c *yaee.Config) { c.OceanicDampening = 1000 },
 		func(c *yaee.Config) { c.Duration = 2 * yaee.MaxSteps },
 		func(c *yaee.Config) {
 			c.RidgeElevation, c.AbyssalElevation, c.TrenchElevation, c.MaxContinentalElevation = -1e-9, -2e-9, -3e-9, 1e-9
@@ -178,7 +184,7 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 		Seed: math.MaxUint64, Radius: 6371.0088, SampleSpacing: 0.1 + 0.2, Duration: 1e-9, TimeStep: math.Pi,
 		Plates: 7, PlateWarpAmplitude: 1e-300, PlateWarpFeatureSize: 1.0 / 3,
 		LandCoverage: 1.0 / 7, RidgeElevation: -0.1, AbyssalElevation: -math.E, TrenchElevation: -1e17, MaxContinentalElevation: 8.848,
-		MaxPlateSpeed: 77.7,
+		MaxPlateSpeed: 77.7, OceanicDampening: 0.1 / 3,
 	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
@@ -199,7 +205,8 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 	const want = `{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,` +
 		`"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,` +
 		`"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,` +
-		`"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100}`
+		`"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,` +
+		`"oceanic_dampening_km_per_my":0.04}`
 	if string(data) != want {
 		t.Fatalf("DefaultConfig as JSON:\n got %s\nwant %s", data, want)
 	}
@@ -342,8 +349,28 @@ func TestGenerateSimulated(t *testing.T) {
 	}
 	still := cfg
 	still.MaxPlateSpeed = 0
-	if rest := mustGenerate(t, still); !reflect.DeepEqual(rest.Attributes, start.Attributes) {
-		t.Fatal("with MaxPlateSpeed 0 the world is not the initial world")
+	// Plates that do not move leave the crust where it was; the ocean
+	// still ages and sinks.
+	rest := mustGenerate(t, still)
+	for _, name := range []string{yaee.AttrPlate, yaee.AttrCrustType, yaee.AttrThickness, yaee.AttrRidgeDirection} {
+		if !reflect.DeepEqual(rest.Attribute(name), start.Attribute(name)) {
+			t.Fatalf("with MaxPlateSpeed 0, %s is not as in the initial world", name)
+		}
+	}
+	for i, kind := range rest.Attribute(yaee.AttrCrustType).Uint8s {
+		age, age0 := rest.Attribute(yaee.AttrOceanicAge).Float64s[i], start.Attribute(yaee.AttrOceanicAge).Float64s[i]
+		z, z0 := rest.Attribute(yaee.AttrElevation).Float64s[i], start.Attribute(yaee.AttrElevation).Float64s[i]
+		if kind == yaee.CrustContinental && (age != 0 || z != z0) {
+			t.Fatalf("with MaxPlateSpeed 0, continental sample %d went from %v km to %v km, age %v", i, z0, z, age)
+		}
+		if kind == yaee.CrustOceanic && (math.Abs(age-age0-cfg.Duration) > 1e-6 || !(z < z0) || z < cfg.TrenchElevation) {
+			t.Fatalf("with MaxPlateSpeed 0, oceanic sample %d went from %v km, %v My to %v km, %v My", i, z0, age0, z, age)
+		}
+	}
+	undamped := still
+	undamped.OceanicDampening = 0
+	if flat := mustGenerate(t, undamped); !reflect.DeepEqual(flat.Attribute(yaee.AttrElevation), start.Attribute(yaee.AttrElevation)) {
+		t.Fatal("with MaxPlateSpeed 0 and OceanicDampening 0 the elevation is not that of the initial world")
 	}
 	// A shorter last step: 5 My in steps of 2 is not 4 or 6 My.
 	short := cfg

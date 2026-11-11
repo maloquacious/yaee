@@ -30,6 +30,8 @@ func earth() model.Params {
 		MaxContinentalElevation: 10,
 
 		MaxPlateSpeed: 100,
+
+		OceanicDampening: 0.04,
 	}
 }
 

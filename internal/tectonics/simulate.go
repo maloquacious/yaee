@@ -34,7 +34,8 @@ const resampleDistance = 500.0
 // steps add up to Duration exactly. With Duration 0 the stage does
 // nothing.
 //
-// Each step moves every plate with Advance. The world is then resampled
+// Each step moves every plate with Advance and carries the oceanic
+// crust through the step with AgeOcean. The world is then resampled
 // with Resample if the fastest sample of any plate has moved
 // resampleDistance km or more since the last resampling, counting each
 // step as that step's length times the speed of the fastest sample at
@@ -77,7 +78,8 @@ func Steps(duration, timeStep float64) int {
 func simulate(ctx context.Context, w *model.World, distance float64) (resamplings int, err error) {
 	steps := Steps(w.Duration, w.TimeStep)
 	speed := maxSpeed(w)
-	var moved float64 // km, since the last resampling
+	var moved float64   // km, since the last resampling
+	var elapsed float64 // My, since the last resampling
 	for s := range steps {
 		if err := ctx.Err(); err != nil {
 			return resamplings, err
@@ -87,13 +89,17 @@ func simulate(ctx context.Context, w *model.World, distance float64) (resampling
 			dt = w.Duration - float64(steps-1)*w.TimeStep
 		}
 		Advance(w, dt)
+		if err := AgeOcean(ctx, w, dt); err != nil {
+			return resamplings, err
+		}
 		moved += speed * dt
+		elapsed += dt
 		if moved >= distance || s == steps-1 && moved > 0 {
-			if err := Resample(ctx, w); err != nil {
+			if err := Resample(ctx, w, elapsed); err != nil {
 				return resamplings, err
 			}
 			resamplings++
-			moved = 0
+			moved, elapsed = 0, 0
 			speed = maxSpeed(w)
 		}
 	}

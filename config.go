@@ -41,7 +41,7 @@ const MaxSteps = 1_000_000
 // are named by the json tags below, and decodes from that object without
 // loss:
 //
-//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100}
+//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.04}
 //
 // Lengths are in kilometres (km) and times in millions of years (My).
 type Config struct {
@@ -166,6 +166,28 @@ type Config struct {
 	// sphere. The speed of a plate's fastest point is drawn uniformly
 	// from 0 to this value. 0 gives plates that do not move.
 	MaxPlateSpeed float64 `json:"max_plate_speed_km_per_my"`
+
+	// OceanicDampening is the rate at which oceanic crust at sea level
+	// sinks as it ages (the oceanic elevation damping ε_o of the paper's
+	// Table 3).
+	// Unit: km/My, which equals mm/y. Range: finite and at least 0.
+	// Default: 0.04.
+	//
+	// In each time step of length δt My, the elevation z of every sample
+	// of oceanic crust becomes
+	//
+	//	z − (1 − z/TrenchElevation) · OceanicDampening · δt
+	//
+	// so oceanic crust sinks toward TrenchElevation and never passes
+	// it: after t My, crust that formed at RidgeElevation is near
+	//
+	//	TrenchElevation + (RidgeElevation − TrenchElevation) · exp(−OceanicDampening · t / |TrenchElevation|)
+	//
+	// which with the defaults is −6 km after 203 My. If
+	// OceanicDampening · δt is greater than |TrenchElevation|, a step
+	// puts the crust at TrenchElevation exactly. 0 gives oceanic crust
+	// that does not sink.
+	OceanicDampening float64 `json:"oceanic_dampening_km_per_my"`
 }
 
 // DefaultConfig returns the configuration of an Earth-like world at
@@ -173,8 +195,8 @@ type Config struct {
 // Duration 250 My, TimeStep 2 My, Plates 40, PlateWarpAmplitude 1500 km,
 // PlateWarpFeatureSize 2500 km, LandCoverage 0.3, RidgeElevation −1 km,
 // AbyssalElevation −6 km, TrenchElevation −10 km,
-// MaxContinentalElevation 10 km, and MaxPlateSpeed 100 km/My. It passes
-// Validate.
+// MaxContinentalElevation 10 km, MaxPlateSpeed 100 km/My, and
+// OceanicDampening 0.04 km/My. It passes Validate.
 func DefaultConfig() Config {
 	return Config{
 		Seed:                 0,
@@ -193,6 +215,8 @@ func DefaultConfig() Config {
 		MaxContinentalElevation: 10,
 
 		MaxPlateSpeed: 100,
+
+		OceanicDampening: 0.04,
 	}
 }
 
@@ -268,6 +292,9 @@ func (c Config) Validate() error {
 	}
 	if !(c.MaxPlateSpeed >= 0) || math.IsInf(c.MaxPlateSpeed, 0) {
 		invalid("MaxPlateSpeed", "must be finite and at least 0, got %v", c.MaxPlateSpeed)
+	}
+	if !(c.OceanicDampening >= 0) || math.IsInf(c.OceanicDampening, 0) {
+		invalid("OceanicDampening", "must be finite and at least 0, got %v", c.OceanicDampening)
 	}
 	return errors.Join(errs...)
 }

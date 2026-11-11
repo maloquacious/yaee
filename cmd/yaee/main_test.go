@@ -108,7 +108,7 @@ func TestGenerateThenRender(t *testing.T) {
 
 	// The crust flags reach the Config.
 	mustRun(t, "generate", "-spacing", "800", "-land-coverage", "0.6", "-ridge-elevation", "-0.5", "-abyssal-elevation", "-4",
-		"-trench-elevation", "-8", "-max-continental-elevation", "9", "-max-plate-speed", "60", "-out", world2)
+		"-trench-elevation", "-8", "-max-continental-elevation", "9", "-max-plate-speed", "60", "-oceanic-dampening", "0.02", "-out", world2)
 	w2, err = yaee.Read(bytes.NewReader(readFile(t, world2)))
 	if err != nil {
 		t.Fatal(err)
@@ -116,7 +116,7 @@ func TestGenerateThenRender(t *testing.T) {
 	want = yaee.DefaultConfig()
 	want.SampleSpacing, want.LandCoverage = 800, 0.6
 	want.RidgeElevation, want.AbyssalElevation, want.TrenchElevation, want.MaxContinentalElevation = -0.5, -4, -8, 9
-	want.MaxPlateSpeed = 60
+	want.MaxPlateSpeed, want.OceanicDampening = 60, 0.02
 	if w2.Config != want {
 		t.Fatalf("the datafile records Config %+v, want %+v", w2.Config, want)
 	}
@@ -221,7 +221,7 @@ func TestFailures(t *testing.T) {
 		{"help for unknown command", []string{"help", "frobnicate"}, 2, []string{`unknown command "frobnicate"`}},
 		{"unknown flag", []string{"generate", "-moons", "2"}, 2, []string{"flag provided but not defined: -moons"}},
 		{"unknown kind", []string{"render", "-in", world, "-out", filepath.Join(dir, "x.png"), "-kind", "rivers"}, 2,
-			[]string{`unknown -kind "rivers"`, "crust, elevation, plates"}},
+			[]string{`unknown -kind "rivers"`, "age, crust, elevation, plates"}},
 		{"malformed flag value", []string{"generate", "-radius", "big", "-out", world}, 2, []string{`invalid value "big" for flag -radius`}},
 		{"negative seed", []string{"generate", "-seed", "-1", "-out", world}, 2, []string{"for flag -seed"}},
 		{"unexpected argument", []string{"generate", "-out", world, "extra"}, 2, []string{`unexpected argument "extra"`}},

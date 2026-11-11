@@ -33,10 +33,10 @@
 //
 // As of this version the initial plates and crust are generated, and
 // the plates then move as rigid bodies for Config.Duration, carrying
-// their crust. Nothing happens yet where plates meet or part: where they
-// part the gap is filled with new oceanic crust at the ridge elevation,
-// and where they meet one plate's crust replaces the other's. No ridge,
-// trench, or mountain is formed.
+// their crust. Where plates part, new oceanic crust forms at the ridge
+// between them, and all oceanic crust ages and sinks. Nothing happens
+// yet where plates meet: one plate's crust replaces the other's, and no
+// trench or mountain is formed.
 //
 // The tectonic model is that of
 //
