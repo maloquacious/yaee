@@ -1,0 +1,9 @@
+*~
+*.gz
+*.pdf
+*.swp
+*.tar
+*.tgz
+*.zip
+.idea/
+tmp/
