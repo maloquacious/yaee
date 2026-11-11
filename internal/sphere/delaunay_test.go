@@ -250,3 +250,28 @@ func BenchmarkTriangulateFullScale(b *testing.B) {
 		mustTriangulate(b, points)
 	}
 }
+
+// The triangles of a Fibonacci point set cover the sphere exactly once
+// and are nearly equal in area. Measured, as a fraction of the mean
+// area: smallest 0.821 to 0.823 and largest 1.304 to 1.306, for n from
+// 100 to 942,059. The bounds are 0.8 and 1.35.
+func TestTriangleAreas(t *testing.T) {
+	for _, n := range []int{100, 1000, 10_007, 50_021} {
+		m := mustTriangulate(t, FibonacciPoints(n))
+		mean := 4 * math.Pi / float64(m.NumTriangles())
+		total := 0.0
+		for i := 0; i < len(m.Tri); i += 3 {
+			a, b, c := m.Points[m.Tri[i]], m.Points[m.Tri[i+1]], m.Points[m.Tri[i+2]]
+			// The area of a spherical triangle is its solid angle (Van
+			// Oosterom and Strackee, 1983).
+			area := 2 * math.Atan2(a.Dot(b.Cross(c)), 1+a.Dot(b)+b.Dot(c)+c.Dot(a))
+			if ratio := area / mean; ratio < 0.8 || ratio > 1.35 {
+				t.Fatalf("n=%d: triangle %d has %.4f of the mean area, want 0.8 to 1.35", n, i/3, ratio)
+			}
+			total += area
+		}
+		if math.Abs(total/(4*math.Pi)-1) > 1e-9 {
+			t.Errorf("n=%d: triangle areas sum to %.12f of the sphere", n, total/(4*math.Pi))
+		}
+	}
+}

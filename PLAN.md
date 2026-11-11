@@ -112,7 +112,29 @@ This departs from the paper, which tracks intersections between boundary triangl
 
 Tracked by [#1](https://github.com/maloquacious/yaee/issues/1), with sub-issues #11 to #14.
 
+**Done** in version 0.5.0-alpha. The code is `internal/sphere`.
+
 Vectors and rotations; Fibonacci sampling (§6); a Delaunay triangulation of the samples on the sphere; neighbour lists; point location (given a point, the triangle containing it and its barycentric weights).
+
+What was built, where the plan left a choice:
+
+- Rotations are unit quaternions. The zero value is not a rotation; use `sphere.Identity()`.
+- The triangulation is the convex hull of the samples, built by incremental insertion with edge flips. Its one geometric test is computed exactly.
+- Point location walks the mesh from a starting triangle found in a cube-map grid. A point on an edge or at a corner resolves to the lowest-numbered triangle that contains it.
+- Barycentric weights are those of the point where the ray from the centre through the query crosses the flat triangle.
+
+Measured at full scale (942,059 samples) on the development machine, a 10-core Apple arm64:
+
+| Measure | Value |
+|---------|-------|
+| Sample, triangulate, and build the point-location index | 0.40 s on one core |
+| Peak resident memory of that build | 120 MB |
+| Point location, uniformly random points | 4.3 million queries/s on one core; 29 million/s on ten |
+| Nearest sample, uniformly random points | 2.7 million queries/s on one core |
+| Triangle area, as a fraction of the mean | 0.82 to 1.31 |
+| Smallest distance between samples, as a fraction of the nominal spacing | 0.81 |
+
+Reproduce with `go test ./internal/sphere -run xxx -bench FullScale`.
 
 Done when:
 
