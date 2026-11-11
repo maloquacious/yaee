@@ -359,7 +359,7 @@ Done when:
 - The radius of influence grows with terrane area and relative speed as the power law states.
 - After a transfer, every sample still belongs to exactly one plate, and the total area of continental crust is unchanged.
 
-**Built** in version 0.17.0-alpha; the reviewer has not yet accepted the images. The code is `internal/tectonics/collision.go` (`Terranes`, `Subduction.Converge`, `Subduction.Collide`) and the resampling rule of `simulate`.
+**Done** in version 0.17.0-alpha. The reviewer accepted the images on 2026-11-11, with the too-high land below left for milestone 9. The code is `internal/tectonics/collision.go` (`Terranes`, `Subduction.Converge`, `Subduction.Collide`) and the resampling rule of `simulate`.
 
 What was built, where the paper and the plan left a choice:
 
