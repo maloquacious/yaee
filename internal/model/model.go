@@ -39,6 +39,8 @@ type Params struct {
 	AbyssalElevation        float64 // km; z_a
 	TrenchElevation         float64 // km; z_t
 	MaxContinentalElevation float64 // km; z_c
+
+	MaxPlateSpeed float64 // km/My; v0 of the paper's Table 3
 }
 
 // Values of World.CrustType.
@@ -63,12 +65,36 @@ type World struct {
 	// must not change it.
 	Mesh *sphere.Mesh
 
+	// Locator finds the triangle of Mesh that contains a point.
+	Locator *sphere.Locator
+
 	// NumPlates is the number of plates. Plates are numbered from 0.
 	NumPlates int
 
 	// Plate is the number of the plate each sample belongs to, from 0
 	// to NumPlates-1.
 	Plate []int32
+
+	// The movement of each plate (G in the paper's §3), indexed by plate
+	// number. The three slices have length NumPlates once the motion
+	// stage has run, and are nil before it.
+	//
+	// A sample's position in Mesh is where its crust was at the last
+	// resampling. Where it is now is that position turned by its
+	// plate's PlateRotation.
+
+	// PlateAxis is the unit axis w each plate turns about. A positive
+	// speed turns the plate counter-clockwise as seen from the tip of
+	// the axis.
+	PlateAxis []sphere.Vec
+
+	// PlateSpeed is each plate's angular speed ω, in radians per My. It
+	// is at least 0.
+	PlateSpeed []float64
+
+	// PlateRotation is the rotation each plate has made since the last
+	// resampling.
+	PlateRotation []sphere.Rotation
 
 	// The crust at each sample: the parameters of the paper's Table 1.
 
@@ -105,12 +131,14 @@ type World struct {
 }
 
 // NewWorld returns a World over the mesh with every per-sample slice
-// allocated and zero. It has no plates: NumPlates is 0.
+// allocated and zero, and a Locator for the mesh. It has no plates:
+// NumPlates is 0.
 func NewWorld(mesh *sphere.Mesh, params Params) *World {
 	n := len(mesh.Points)
 	return &World{
 		Params:         params,
 		Mesh:           mesh,
+		Locator:        sphere.NewLocator(mesh),
 		Plate:          make([]int32, n),
 		CrustType:      make([]uint8, n),
 		Thickness:      make([]float64, n),

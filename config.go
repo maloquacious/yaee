@@ -37,7 +37,7 @@ const MaxPlates = 1000
 // are named by the json tags below, and decodes from that object without
 // loss:
 //
-//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10}
+//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100}
 //
 // Lengths are in kilometres (km) and times in millions of years (My).
 type Config struct {
@@ -150,14 +150,28 @@ type Config struct {
 	// The initial land is at 0.01 of this elevation at the coast and
 	// 0.05 of it 500 km or more inland.
 	MaxContinentalElevation float64 `json:"max_continental_elevation_km"`
+
+	// MaxPlateSpeed is the greatest speed at which any point of a plate
+	// moves over the surface (v0 in the paper's Table 3).
+	// Unit: km/My, which equals mm/y. Range: finite and at least 0.
+	// Default: 100.
+	//
+	// Each plate turns about its own axis through the centre of the
+	// sphere. The speed of a plate's fastest point is drawn uniformly
+	// from 0 to this value. 0 gives plates that do not move.
+	//
+	// As of this version it is validated and recorded but has no effect
+	// on the world.
+	MaxPlateSpeed float64 `json:"max_plate_speed_km_per_my"`
 }
 
 // DefaultConfig returns the configuration of an Earth-like world at
 // about 25 km per sample: Seed 0, Radius 6370 km, SampleSpacing 25 km,
 // Duration 250 My, TimeStep 2 My, Plates 40, PlateWarpAmplitude 1500 km,
 // PlateWarpFeatureSize 2500 km, LandCoverage 0.3, RidgeElevation −1 km,
-// AbyssalElevation −6 km, TrenchElevation −10 km, and
-// MaxContinentalElevation 10 km. It passes Validate.
+// AbyssalElevation −6 km, TrenchElevation −10 km,
+// MaxContinentalElevation 10 km, and MaxPlateSpeed 100 km/My. It passes
+// Validate.
 func DefaultConfig() Config {
 	return Config{
 		Seed:                 0,
@@ -174,6 +188,8 @@ func DefaultConfig() Config {
 		AbyssalElevation:        -6,
 		TrenchElevation:         -10,
 		MaxContinentalElevation: 10,
+
+		MaxPlateSpeed: 100,
 	}
 }
 
@@ -244,6 +260,9 @@ func (c Config) Validate() error {
 	}
 	if !positive(c.MaxContinentalElevation) {
 		invalid("MaxContinentalElevation", "must be finite and greater than 0, got %v", c.MaxContinentalElevation)
+	}
+	if !(c.MaxPlateSpeed >= 0) || math.IsInf(c.MaxPlateSpeed, 0) {
+		invalid("MaxPlateSpeed", "must be finite and at least 0, got %v", c.MaxPlateSpeed)
 	}
 	return errors.Join(errs...)
 }

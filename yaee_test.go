@@ -43,6 +43,7 @@ func TestDefaultConfig(t *testing.T) {
 		Seed: 0, Radius: 6370, SampleSpacing: 25, Duration: 250, TimeStep: 2,
 		Plates: 40, PlateWarpAmplitude: 1500, PlateWarpFeatureSize: 2500,
 		LandCoverage: 0.3, RidgeElevation: -1, AbyssalElevation: -6, TrenchElevation: -10, MaxContinentalElevation: 10,
+		MaxPlateSpeed: 100,
 	}
 	if cfg != want {
 		t.Fatalf("DefaultConfig() = %+v, want %+v", cfg, want)
@@ -54,8 +55,8 @@ func TestZeroConfigInvalid(t *testing.T) {
 	if !errors.Is(err, yaee.ErrInvalidConfig) {
 		t.Fatalf("zero Config: got %v, want ErrInvalidConfig", err)
 	}
-	// Zero is legitimate for Seed, Duration, PlateWarpAmplitude, and
-	// LandCoverage, and for nothing else. A zero TrenchElevation is
+	// Zero is legitimate for Seed, Duration, PlateWarpAmplitude,
+	// LandCoverage, and MaxPlateSpeed, and for nothing else. A zero TrenchElevation is
 	// invalid only because it is not below the AbyssalElevation.
 	for _, field := range []string{"Radius", "SampleSpacing", "TimeStep", "Plates", "PlateWarpFeatureSize",
 		"RidgeElevation", "AbyssalElevation", "TrenchElevation", "MaxContinentalElevation"} {
@@ -63,7 +64,7 @@ func TestZeroConfigInvalid(t *testing.T) {
 			t.Errorf("error does not name %s: %v", field, err)
 		}
 	}
-	for _, field := range []string{"Seed", "Duration", "PlateWarpAmplitude", "LandCoverage"} {
+	for _, field := range []string{"Seed", "Duration", "PlateWarpAmplitude", "LandCoverage", "MaxPlateSpeed"} {
 		if strings.Contains(err.Error(), ": "+field+": ") {
 			t.Errorf("error names %s, whose zero is valid: %v", field, err)
 		}
@@ -115,6 +116,9 @@ func TestValidateNamesField(t *testing.T) {
 		{"MaxContinentalElevation", func(c *yaee.Config) { c.MaxContinentalElevation = -10 }},
 		{"MaxContinentalElevation", func(c *yaee.Config) { c.MaxContinentalElevation = nan }},
 		{"MaxContinentalElevation", func(c *yaee.Config) { c.MaxContinentalElevation = inf }},
+		{"MaxPlateSpeed", func(c *yaee.Config) { c.MaxPlateSpeed = -1 }},
+		{"MaxPlateSpeed", func(c *yaee.Config) { c.MaxPlateSpeed = nan }},
+		{"MaxPlateSpeed", func(c *yaee.Config) { c.MaxPlateSpeed = inf }},
 		{"SampleSpacing", func(c *yaee.Config) { c.SampleSpacing = 1e-300 }},
 		{"Duration", func(c *yaee.Config) { c.Duration = -1 }},
 		{"Duration", func(c *yaee.Config) { c.Duration = nan }},
@@ -153,6 +157,7 @@ func TestValidateAcceptsBoundaries(t *testing.T) {
 		func(c *yaee.Config) { c.PlateWarpAmplitude = 0 },
 		func(c *yaee.Config) { c.LandCoverage = 0 },
 		func(c *yaee.Config) { c.LandCoverage = 1 },
+		func(c *yaee.Config) { c.MaxPlateSpeed = 0 },
 		func(c *yaee.Config) {
 			c.RidgeElevation, c.AbyssalElevation, c.TrenchElevation, c.MaxContinentalElevation = -1e-9, -2e-9, -3e-9, 1e-9
 		},
@@ -170,6 +175,7 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 		Seed: math.MaxUint64, Radius: 6371.0088, SampleSpacing: 0.1 + 0.2, Duration: 1e-9, TimeStep: math.Pi,
 		Plates: 7, PlateWarpAmplitude: 1e-300, PlateWarpFeatureSize: 1.0 / 3,
 		LandCoverage: 1.0 / 7, RidgeElevation: -0.1, AbyssalElevation: -math.E, TrenchElevation: -1e17, MaxContinentalElevation: 8.848,
+		MaxPlateSpeed: 77.7,
 	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
@@ -190,7 +196,7 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 	const want = `{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,` +
 		`"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,` +
 		`"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,` +
-		`"max_continental_elevation_km":10}`
+		`"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100}`
 	if string(data) != want {
 		t.Fatalf("DefaultConfig as JSON:\n got %s\nwant %s", data, want)
 	}

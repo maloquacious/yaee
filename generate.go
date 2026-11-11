@@ -54,6 +54,8 @@ func Generate(ctx context.Context, cfg Config) (*World, error) {
 		AbyssalElevation:        cfg.AbyssalElevation,
 		TrenchElevation:         cfg.TrenchElevation,
 		MaxContinentalElevation: cfg.MaxContinentalElevation,
+
+		MaxPlateSpeed: cfg.MaxPlateSpeed,
 	})
 	if err := model.Run(ctx, mw, cfg.Seed, stages()); err != nil {
 		return nil, err
@@ -63,7 +65,7 @@ func Generate(ctx context.Context, cfg Config) (*World, error) {
 
 // stages returns the stages of generation, in the order they run.
 func stages() []model.Stage {
-	return []model.Stage{tectonics.Plates{}, tectonics.Crust{}}
+	return []model.Stage{tectonics.Plates{}, tectonics.Crust{}, tectonics.Motion{}}
 }
 
 // export copies the working data into a World.

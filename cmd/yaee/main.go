@@ -204,6 +204,7 @@ func generateCommand() *command {
 		abyssal     = fs.Float64("abyssal-elevation", def.AbyssalElevation, "Elevation of the abyssal plains, in `km`. Less than -ridge-elevation and greater than -trench-elevation.")
 		trench      = fs.Float64("trench-elevation", def.TrenchElevation, "Elevation of the deepest oceanic trench, in `km`. Less than -abyssal-elevation.")
 		maxCont     = fs.Float64("max-continental-elevation", def.MaxContinentalElevation, "Highest elevation of continental crust, in `km`. Greater than 0.")
+		maxSpeed    = fs.Float64("max-plate-speed", def.MaxPlateSpeed, "Greatest speed of any point of a plate, in `km/My` (equal to mm/y). At least 0; 0 gives plates that do not move.")
 		outPath     = fs.String("out", "", "Write the datafile to this `file`, replacing it if it exists.")
 		writeConfig = fs.String("write-config", "", "Write the effective Config as JSON to this `file`, or to standard output if the value is \"-\".")
 		verbose     = fs.Bool("v", false, "Print the sample count, file size, and timings to standard error.")
@@ -216,7 +217,7 @@ and no -out, the Config is checked and written and no world is generated.
 
 The effective Config is the default Config, then the members of the
 -config file, then each of the flags from -seed to
--max-continental-elevation that is given. The defaults shown above are
+-max-plate-speed that is given. The defaults shown above are
 the default Config: an Earth-like world of 942059 samples. An invalid
 Config is reported with the name of each invalid field, and nothing is
 written.
@@ -288,6 +289,9 @@ Example:
 			}
 			if wasSet(fs, "max-continental-elevation") {
 				cfg.MaxContinentalElevation = *maxCont
+			}
+			if wasSet(fs, "max-plate-speed") {
+				cfg.MaxPlateSpeed = *maxSpeed
 			}
 			if err := cfg.Validate(); err != nil {
 				return err

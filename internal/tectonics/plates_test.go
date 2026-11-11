@@ -28,6 +28,8 @@ func earth() model.Params {
 		AbyssalElevation:        -6,
 		TrenchElevation:         -10,
 		MaxContinentalElevation: 10,
+
+		MaxPlateSpeed: 100,
 	}
 }
 

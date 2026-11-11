@@ -108,7 +108,7 @@ func TestGenerateThenRender(t *testing.T) {
 
 	// The crust flags reach the Config.
 	mustRun(t, "generate", "-spacing", "800", "-land-coverage", "0.6", "-ridge-elevation", "-0.5", "-abyssal-elevation", "-4",
-		"-trench-elevation", "-8", "-max-continental-elevation", "9", "-out", world2)
+		"-trench-elevation", "-8", "-max-continental-elevation", "9", "-max-plate-speed", "60", "-out", world2)
 	w2, err = yaee.Read(bytes.NewReader(readFile(t, world2)))
 	if err != nil {
 		t.Fatal(err)
@@ -116,6 +116,7 @@ func TestGenerateThenRender(t *testing.T) {
 	want = yaee.DefaultConfig()
 	want.SampleSpacing, want.LandCoverage = 800, 0.6
 	want.RidgeElevation, want.AbyssalElevation, want.TrenchElevation, want.MaxContinentalElevation = -0.5, -4, -8, 9
+	want.MaxPlateSpeed = 60
 	if w2.Config != want {
 		t.Fatalf("the datafile records Config %+v, want %+v", w2.Config, want)
 	}

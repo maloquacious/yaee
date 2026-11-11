@@ -404,7 +404,7 @@ func exampleWorld(t testing.TB) *yaee.World {
 	cfg.SampleSpacing = 10000
 	cfg.Plates = 2
 	w := mustGenerate(t, cfg)
-	w.Version = "0.11.0-alpha"
+	w.Version = "0.12.0-alpha"
 	return w
 }
 
