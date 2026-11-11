@@ -106,6 +106,20 @@ func TestGenerateThenRender(t *testing.T) {
 		t.Fatalf("the datafile records Config %+v, want %+v", w2.Config, want)
 	}
 
+	// The crust flags reach the Config.
+	mustRun(t, "generate", "-spacing", "800", "-land-coverage", "0.6", "-ridge-elevation", "-0.5", "-abyssal-elevation", "-4",
+		"-trench-elevation", "-8", "-max-continental-elevation", "9", "-out", world2)
+	w2, err = yaee.Read(bytes.NewReader(readFile(t, world2)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = yaee.DefaultConfig()
+	want.SampleSpacing, want.LandCoverage = 800, 0.6
+	want.RidgeElevation, want.AbyssalElevation, want.TrenchElevation, want.MaxContinentalElevation = -0.5, -4, -8, 9
+	if w2.Config != want {
+		t.Fatalf("the datafile records Config %+v, want %+v", w2.Config, want)
+	}
+
 	// The default width.
 	mustRun(t, "render", "-in", world, "-out", image)
 	if cfg, err := png.DecodeConfig(bytes.NewReader(readFile(t, image))); err != nil || cfg.Width != 2048 || cfg.Height != 1024 {
@@ -206,7 +220,7 @@ func TestFailures(t *testing.T) {
 		{"help for unknown command", []string{"help", "frobnicate"}, 2, []string{`unknown command "frobnicate"`}},
 		{"unknown flag", []string{"generate", "-moons", "2"}, 2, []string{"flag provided but not defined: -moons"}},
 		{"unknown kind", []string{"render", "-in", world, "-out", filepath.Join(dir, "x.png"), "-kind", "rivers"}, 2,
-			[]string{`unknown -kind "rivers"`, "elevation, plates"}},
+			[]string{`unknown -kind "rivers"`, "crust, elevation, plates"}},
 		{"malformed flag value", []string{"generate", "-radius", "big", "-out", world}, 2, []string{`invalid value "big" for flag -radius`}},
 		{"negative seed", []string{"generate", "-seed", "-1", "-out", world}, 2, []string{"for flag -seed"}},
 		{"unexpected argument", []string{"generate", "-out", world, "extra"}, 2, []string{`unexpected argument "extra"`}},
@@ -217,6 +231,7 @@ func TestFailures(t *testing.T) {
 
 		{"invalid Config", []string{"generate", "-radius", "-5", "-time-step", "0", "-out", filepath.Join(dir, "bad.yaee")}, 1,
 			[]string{"invalid config: Radius:", "invalid config: TimeStep:"}},
+		{"bad land coverage", []string{"generate", "-land-coverage", "1.5", "-out", filepath.Join(dir, "bad.yaee")}, 1, []string{"invalid config: LandCoverage:"}},
 		{"too many plates", []string{"generate", "-spacing", "5000", "-plates", "30", "-out", filepath.Join(dir, "bad.yaee")}, 1, []string{"invalid config: Plates:"}},
 		{"too many samples", []string{"generate", "-spacing", "1", "-out", filepath.Join(dir, "bad.yaee")}, 1, []string{"invalid config: SampleSpacing:"}},
 		{"unreadable Config", []string{"generate", "-config", missing, "-out", world}, 1, []string{missing}},

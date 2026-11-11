@@ -189,6 +189,8 @@ Measured at full scale (942,059 samples) on the development machine:
 
 Tracked by [#3](https://github.com/maloquacious/yaee/issues/3), with sub-issues #18 to #20.
 
+**Built** in version 0.11.0-alpha; the review of the images, the last item below, has been asked for and is not yet given. The code is `internal/noise` and `internal/tectonics` (`Plates`, `Crust`), with `sphere.Mesh.PointAreas` and `sphere.Mesh.Distances`.
+
 Seeded coherent noise. Plate centroids distributed over the sphere; plates as the Voronoi cells of the centroids, with boundaries warped by noise (§3, Workflow). Continental and oceanic crust assigned to reach the configured land coverage. Initial elevation, thickness, and age. Images of plates and crust type.
 
 Done when:
@@ -197,6 +199,24 @@ Done when:
 - The plate count matches the `Config`, and land coverage is within a stated tolerance of it.
 - With warping turned off, each sample belongs to the plate with the nearest centroid.
 - The person reviewing the images accepts the plate shapes as irregular but plausible.
+
+What was built, where the paper and the plan left a choice (the paper gives no method or constant for any of this):
+
+- Noise is simplex gradient noise with a kernel radius of √0.5, gradients hashed from the lattice coordinates and the seed, evaluated at three-dimensional positions so the sphere has no seam or pole. `noise.Fractal` sums octaves, each with its own seed, rotation, and offset.
+- Centroids are uniform random points kept at least 0.5 · √(4πR²/P) apart. A sample goes to the plate whose centroid is nearest its position after the position is moved by three fractal noise sources (`PlateWarpAmplitude`, default 1500 km; `PlateWarpFeatureSize`, default 2500 km). Pieces the warp cuts off are given to neighbouring plates, so every plate is connected. The default is 40 plates.
+- Continents are regions within plates, not whole plates. Plates are made continental, in random order, until they hold `LandCoverage` / 0.7 of the area; within them, samples are made continental in order of distance from the edge of the group of continental plates plus fractal noise, until the area is reached. Touching continental plates carry one continent. The continental share is within 1.5/N of `LandCoverage` (default 0.3).
+- Initial values: thickness 7 km oceanic and 35 km continental; ocean floor at z_r at the coast falling to z_a 500 km out; land at 0.01 · z_c at the coast rising to 0.05 · z_c 500 km inland; oceanic age 202.7 My everywhere, the time the paper's dampening (§4.5) takes from z_r to z_a; no ridge direction, orogeny, or fold. z_r, z_a, z_t, and z_c are `Config` fields with the paper's Table 3 values as defaults.
+- The datafile carries every parameter of the paper's Table 1 as an attribute: `plate`, `crust_type`, `thickness`, `elevation`, `oceanic_age`, `ridge_direction`, `orogeny_age`, `orogeny_type`, `fold_direction`.
+- `yaee render -kind` selects `elevation`, `plates`, or `crust`.
+
+Measured at full scale (942,059 samples) on the development machine:
+
+| Measure | Value |
+|---------|-------|
+| `yaee generate` | 1.0 s, 420 MB peak resident memory |
+| Datafile | 126,236,562 bytes |
+| `yaee render -kind crust` at 2048 × 1024 | 0.4 s, 280 MB peak resident memory |
+| Repeat runs, with `GOMAXPROCS=1` and with the default | Identical datafile bytes |
 
 ### 4. Motion and resampling
 

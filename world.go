@@ -64,12 +64,75 @@ const (
 	// plate.
 	AttrPlate = "plate"
 
-	// AttrElevation is the height of the surface above sea level.
+	// AttrCrustType is the type of the crust (x_C in the paper's
+	// Table 1). Type Uint8, 1 component, no unit. Values: CrustOceanic
+	// (0) or CrustContinental (1).
+	AttrCrustType = "crust_type"
+
+	// AttrThickness is the thickness of the crust (e). Type Float64,
+	// 1 component, unit "km". Range: greater than 0. As of this version
+	// it is 7 for oceanic crust and 35 for continental crust.
+	AttrThickness = "thickness"
+
+	// AttrElevation is the height of the surface above sea level (z).
 	// Type Float64, 1 component, unit "km". Negative below sea level.
+	// Range: Config.TrenchElevation to Config.MaxContinentalElevation.
 	//
-	// As of this version it is a placeholder, not a simulated value:
-	// for a sample at (x, y, z) it is 4(x² − y²) + 6yz − 1.
+	// As of this version no tectonics is simulated, and the elevation
+	// is that of the initial crust: Config.AbyssalElevation to
+	// Config.RidgeElevation for oceanic crust, and 0.01 to 0.05 of
+	// Config.MaxContinentalElevation for continental crust.
 	AttrElevation = "elevation"
+
+	// AttrOceanicAge is the time since oceanic crust formed at a ridge
+	// (a_o). Type Float64, 1 component, unit "My". Range: at least 0.
+	// It is 0 for continental crust.
+	AttrOceanicAge = "oceanic_age"
+
+	// AttrRidgeDirection is the direction of the ridge at which oceanic
+	// crust formed (r). Type Float64, 3 components (x, y, z on the axes
+	// of World.Positions), no unit. It is a unit vector perpendicular
+	// to the sample's position, or (0, 0, 0) where no direction is
+	// known. It is (0, 0, 0) for continental crust.
+	//
+	// As of this version it is (0, 0, 0) for every sample.
+	AttrRidgeDirection = "ridge_direction"
+
+	// AttrOrogenyAge is the time since the mountain building that last
+	// affected the sample began (a_c). Type Float64, 1 component, unit
+	// "My". Range: at least 0. It is 0 where the orogeny type is
+	// OrogenyNone.
+	AttrOrogenyAge = "orogeny_age"
+
+	// AttrOrogenyType is the kind of mountain building that last
+	// affected the sample (o). Type Uint8, 1 component, no unit.
+	// Values: OrogenyNone (0), OrogenyAndean (1), or OrogenyHimalayan
+	// (2).
+	//
+	// As of this version it is OrogenyNone for every sample.
+	AttrOrogenyType = "orogeny_type"
+
+	// AttrFoldDirection is the direction in which the crust is folded
+	// (f). Type Float64, 3 components (x, y, z on the axes of
+	// World.Positions), no unit. It is a vector perpendicular to the
+	// sample's position, not necessarily of length 1, or (0, 0, 0)
+	// where the crust is not folded.
+	//
+	// As of this version it is (0, 0, 0) for every sample.
+	AttrFoldDirection = "fold_direction"
+)
+
+// Values of the AttrCrustType attribute.
+const (
+	CrustOceanic     uint8 = 0
+	CrustContinental uint8 = 1
+)
+
+// Values of the AttrOrogenyType attribute.
+const (
+	OrogenyNone      uint8 = 0 // no mountain building has affected the sample
+	OrogenyAndean    uint8 = 1 // raised where an oceanic plate subducts beneath it
+	OrogenyHimalayan uint8 = 2 // raised by the collision of two continents
 )
 
 // NumSamples returns the number of samples.

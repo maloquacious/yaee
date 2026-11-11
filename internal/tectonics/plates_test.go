@@ -22,6 +22,12 @@ func earth() model.Params {
 		Plates:               40,
 		PlateWarpAmplitude:   1500,
 		PlateWarpFeatureSize: 2500,
+
+		LandCoverage:            0.3,
+		RidgeElevation:          -1,
+		AbyssalElevation:        -6,
+		TrenchElevation:         -10,
+		MaxContinentalElevation: 10,
 	}
 }
 

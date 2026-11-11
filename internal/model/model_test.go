@@ -122,8 +122,14 @@ func TestNewWorld(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := NewWorld(mesh, Params{Radius: 6370, Plates: 3})
-	if len(w.Elevation) != 20 || len(w.Plate) != 20 {
-		t.Fatalf("len(Elevation) = %d, len(Plate) = %d, want 20", len(w.Elevation), len(w.Plate))
+	for name, n := range map[string]int{
+		"Plate": len(w.Plate), "CrustType": len(w.CrustType), "Thickness": len(w.Thickness),
+		"Elevation": len(w.Elevation), "OceanicAge": len(w.OceanicAge), "RidgeDirection": len(w.RidgeDirection),
+		"OrogenyAge": len(w.OrogenyAge), "OrogenyType": len(w.OrogenyType), "FoldDirection": len(w.FoldDirection),
+	} {
+		if n != 20 {
+			t.Fatalf("len(%s) = %d, want 20", name, n)
+		}
 	}
 	if w.Radius != 6370 || w.Plates != 3 || w.NumPlates != 0 || w.Mesh != mesh {
 		t.Fatalf("NewWorld did not keep its arguments: %+v", w)

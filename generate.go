@@ -6,7 +6,6 @@ package yaee
 import (
 	"context"
 	"fmt"
-	"math/rand/v2"
 
 	"github.com/maloquacious/yaee/internal/model"
 	"github.com/maloquacious/yaee/internal/sphere"
@@ -24,8 +23,8 @@ import (
 // whatever the number of processors. Worlds generated on different
 // architectures may differ.
 //
-// At the default scale Generate takes under a second and uses about
-// 200 MB of memory. It may run goroutines, all of which have ended when it
+// At the default scale Generate takes about a second and uses about
+// 420 MB of memory. It may run goroutines, all of which have ended when it
 // returns.
 func Generate(ctx context.Context, cfg Config) (*World, error) {
 	if err := cfg.Validate(); err != nil {
@@ -49,6 +48,12 @@ func Generate(ctx context.Context, cfg Config) (*World, error) {
 		Plates:               cfg.Plates,
 		PlateWarpAmplitude:   cfg.PlateWarpAmplitude,
 		PlateWarpFeatureSize: cfg.PlateWarpFeatureSize,
+
+		LandCoverage:            cfg.LandCoverage,
+		RidgeElevation:          cfg.RidgeElevation,
+		AbyssalElevation:        cfg.AbyssalElevation,
+		TrenchElevation:         cfg.TrenchElevation,
+		MaxContinentalElevation: cfg.MaxContinentalElevation,
 	})
 	if err := model.Run(ctx, mw, cfg.Seed, stages()); err != nil {
 		return nil, err
@@ -58,7 +63,7 @@ func Generate(ctx context.Context, cfg Config) (*World, error) {
 
 // stages returns the stages of generation, in the order they run.
 func stages() []model.Stage {
-	return []model.Stage{tectonics.Plates{}, placeholder{}}
+	return []model.Stage{tectonics.Plates{}, tectonics.Crust{}}
 }
 
 // export copies the working data into a World.
@@ -77,31 +82,23 @@ func export(cfg Config, mw *model.World) *World {
 	}
 	w.Attributes = []Attribute{
 		{Name: AttrPlate, Unit: "", Type: Int32, Components: 1, Int32s: mw.Plate},
+		{Name: AttrCrustType, Unit: "", Type: Uint8, Components: 1, Uint8s: mw.CrustType},
+		{Name: AttrThickness, Unit: "km", Type: Float64, Components: 1, Float64s: mw.Thickness},
 		{Name: AttrElevation, Unit: "km", Type: Float64, Components: 1, Float64s: mw.Elevation},
+		{Name: AttrOceanicAge, Unit: "My", Type: Float64, Components: 1, Float64s: mw.OceanicAge},
+		{Name: AttrRidgeDirection, Unit: "", Type: Float64, Components: 3, Float64s: flatten(mw.RidgeDirection)},
+		{Name: AttrOrogenyAge, Unit: "My", Type: Float64, Components: 1, Float64s: mw.OrogenyAge},
+		{Name: AttrOrogenyType, Unit: "", Type: Uint8, Components: 1, Uint8s: mw.OrogenyType},
+		{Name: AttrFoldDirection, Unit: "", Type: Float64, Components: 3, Float64s: flatten(mw.FoldDirection)},
 	}
 	return w
 }
 
-// placeholder stands in for the crust until it exists. It sets the
-// elevation to a smooth function of position, so that images and
-// datafiles of the skeleton are not uniform. It is not part of the
-// paper's model, and it draws no random numbers.
-type placeholder struct{}
-
-func (placeholder) Name() string { return "placeholder" }
-
-func (placeholder) Run(ctx context.Context, w *model.World, _ *rand.Rand) error {
-	return model.ParallelRange(ctx, len(w.Elevation), func(lo, hi int) {
-		for i := lo; i < hi; i++ {
-			w.Elevation[i] = placeholderElevation(w.Mesh.Points[i])
-		}
-	})
-}
-
-// placeholderElevation is the placeholder stage's elevation in km at a
-// unit position: 4(x² − y²) + 6yz − 1. It is written with explicit
-// conversions so that no multiplication is fused with an addition, which
-// would make the result depend on the compiler.
-func placeholderElevation(p sphere.Vec) float64 {
-	return float64(4*(float64(p.X*p.X)-float64(p.Y*p.Y))) + float64(6*p.Y*p.Z) - 1
+// flatten returns the vectors' components: x, y, z of each in turn.
+func flatten(vecs []sphere.Vec) []float64 {
+	out := make([]float64, 0, 3*len(vecs))
+	for _, v := range vecs {
+		out = append(out, v.X, v.Y, v.Z)
+	}
+	return out
 }

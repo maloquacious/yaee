@@ -102,6 +102,31 @@ func Plates(w *yaee.World, width int) (*image.NRGBA, error) {
 	return img, nil
 }
 
+// CrustType draws the world's crust type as an equirectangular image
+// with the size and layout that Elevation documents. A pixel takes the
+// colour of the crust type of the sample nearest to its centre: oceanic
+// (40, 90, 160), a blue; continental (190, 170, 110), a tan; any other
+// value (255, 0, 255), magenta.
+func CrustType(w *yaee.World, width int) (*image.NRGBA, error) {
+	a := w.Attribute(yaee.AttrCrustType)
+	if a == nil || a.Type != yaee.Uint8 || a.Components != 1 || len(a.Uint8s) != w.NumSamples() {
+		return nil, attributeError(w, yaee.AttrCrustType, "uint8")
+	}
+	grid, err := nearestSamples(w, width)
+	if err != nil {
+		return nil, err
+	}
+	return paint(grid, width, func(sample int32) color.NRGBA {
+		switch a.Uint8s[sample] {
+		case yaee.CrustOceanic:
+			return color.NRGBA{R: 40, G: 90, B: 160, A: 255}
+		case yaee.CrustContinental:
+			return color.NRGBA{R: 190, G: 170, B: 110, A: 255}
+		}
+		return color.NRGBA{R: 255, G: 0, B: 255, A: 255}
+	}), nil
+}
+
 // attributeError describes a missing or unusable attribute.
 func attributeError(w *yaee.World, name, want string) error {
 	a := w.Attribute(name)

@@ -8,7 +8,8 @@ Its output is a datafile that other applications read to build their own world m
 ## Status
 
 Early alpha. **It does not simulate tectonics yet.**
-The sphere, the public API, the datafile format, and the command work at full scale, around a world whose elevation is a placeholder function of position.
+The sphere, the public API, the datafile format, and the command work at full scale.
+A generated world has its initial plates and its initial crust, continents and oceans, and no plate moves yet.
 [PLAN.md](PLAN.md) lists what is built and what comes next.
 Until the first tagged release, the API and the datafile format may change without notice.
 
@@ -52,6 +53,8 @@ From the command line:
 ```sh
 go run ./cmd/yaee generate -seed 42 -out tmp/world.yaee
 go run ./cmd/yaee render -in tmp/world.yaee -out tmp/world.png
+go run ./cmd/yaee render -in tmp/world.yaee -kind plates -out tmp/plates.png
+go run ./cmd/yaee render -in tmp/world.yaee -kind crust -out tmp/crust.png
 go run ./cmd/yaee help
 ```
 

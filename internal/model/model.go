@@ -33,7 +33,26 @@ type Params struct {
 	Plates               int     // number of plates at the start
 	PlateWarpAmplitude   float64 // km
 	PlateWarpFeatureSize float64 // km
+
+	LandCoverage            float64 // fraction of the sphere's area, 0 to 1
+	RidgeElevation          float64 // km; z_r of the paper's Table 3
+	AbyssalElevation        float64 // km; z_a
+	TrenchElevation         float64 // km; z_t
+	MaxContinentalElevation float64 // km; z_c
 }
+
+// Values of World.CrustType.
+const (
+	Oceanic     uint8 = 0
+	Continental uint8 = 1
+)
+
+// Values of World.OrogenyType.
+const (
+	OrogenyNone      uint8 = 0 // no mountain building has affected the sample
+	OrogenyAndean    uint8 = 1 // raised by subduction (§4.1)
+	OrogenyHimalayan uint8 = 2 // raised by continental collision (§4.2)
+)
 
 // World is the working data of a world. Per-sample data is one slice per
 // attribute, indexed by sample number.
@@ -51,8 +70,38 @@ type World struct {
 	// to NumPlates-1.
 	Plate []int32
 
-	// Elevation is the height of each sample above sea level, in km.
+	// The crust at each sample: the parameters of the paper's Table 1.
+
+	// CrustType is Oceanic or Continental (x_C).
+	CrustType []uint8
+
+	// Thickness is the thickness of the crust, in km (e).
+	Thickness []float64
+
+	// Elevation is the height of each sample above sea level, in km (z).
 	Elevation []float64
+
+	// OceanicAge is the time since oceanic crust formed at a ridge, in
+	// My (a_o). It is 0 for continental crust.
+	OceanicAge []float64
+
+	// RidgeDirection is the direction of the ridge where oceanic crust
+	// formed (r): a unit vector tangent to the sphere at the sample, or
+	// the zero vector where no direction is known. It is the zero
+	// vector for continental crust.
+	RidgeDirection []sphere.Vec
+
+	// OrogenyAge is the time since the sample's latest orogeny began,
+	// in My (a_c). It is 0 where OrogenyType is OrogenyNone.
+	OrogenyAge []float64
+
+	// OrogenyType is OrogenyNone, OrogenyAndean, or OrogenyHimalayan (o).
+	OrogenyType []uint8
+
+	// FoldDirection is the direction of folding of the crust (f): a
+	// vector tangent to the sphere at the sample, or the zero vector
+	// where the crust has not been folded.
+	FoldDirection []sphere.Vec
 }
 
 // NewWorld returns a World over the mesh with every per-sample slice
@@ -60,10 +109,17 @@ type World struct {
 func NewWorld(mesh *sphere.Mesh, params Params) *World {
 	n := len(mesh.Points)
 	return &World{
-		Params:    params,
-		Mesh:      mesh,
-		Plate:     make([]int32, n),
-		Elevation: make([]float64, n),
+		Params:         params,
+		Mesh:           mesh,
+		Plate:          make([]int32, n),
+		CrustType:      make([]uint8, n),
+		Thickness:      make([]float64, n),
+		Elevation:      make([]float64, n),
+		OceanicAge:     make([]float64, n),
+		RidgeDirection: make([]sphere.Vec, n),
+		OrogenyAge:     make([]float64, n),
+		OrogenyType:    make([]uint8, n),
+		FoldDirection:  make([]sphere.Vec, n),
 	}
 }
 

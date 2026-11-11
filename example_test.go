@@ -27,15 +27,23 @@ func Example() {
 	elevation := world.Attribute(yaee.AttrElevation)
 	fmt.Println("elevation:", elevation.Type, "in", elevation.Unit)
 
-	p := world.Positions[100]
-	fmt.Printf("sample 100 is at (%.3f, %.3f, %.3f), %.3f km above sea level\n",
-		p[0], p[1], p[2], elevation.Float64s[100])
+	crust := world.Attribute(yaee.AttrCrustType)
+	for _, i := range []int{100, 400} {
+		kind := "oceanic"
+		if crust.Uint8s[i] == yaee.CrustContinental {
+			kind = "continental"
+		}
+		p := world.Positions[i]
+		fmt.Printf("sample %d is at (%.3f, %.3f, %.3f): %s crust, %.3f km above sea level\n",
+			i, p[0], p[1], p[2], kind, elevation.Float64s[i])
+	}
 
 	// Output:
 	// samples: 589
 	// triangles: 1174
 	// elevation: float64 in km
-	// sample 100 is at (0.248, -0.710, 0.659), -5.581 km above sea level
+	// sample 100 is at (0.248, -0.710, 0.659): continental crust, 0.100 km above sea level
+	// sample 400 is at (0.212, 0.909, -0.360): oceanic crust, -6.000 km above sea level
 }
 
 // A Config that is out of range is rejected with an error naming the

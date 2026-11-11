@@ -199,6 +199,11 @@ func generateCommand() *command {
 		plates      = fs.Int("plates", def.Plates, fmt.Sprintf("Number of tectonic plates at the start: an `integer` from 1 to %d, and no more than the sample count.", yaee.MaxPlates))
 		warpAmp     = fs.Float64("plate-warp-amplitude", def.PlateWarpAmplitude, "How far the initial plate boundaries are bent away from straight, in `km`. At least 0; 0 gives Voronoi cells.")
 		warpSize    = fs.Float64("plate-warp-feature-size", def.PlateWarpFeatureSize, "Length of the largest bends in the initial plate boundaries, in `km`. Greater than 0.")
+		land        = fs.Float64("land-coverage", def.LandCoverage, "Share of the sphere's area that is continental crust at the start: a `fraction` from 0 to 1.")
+		ridge       = fs.Float64("ridge-elevation", def.RidgeElevation, "Highest elevation of oceanic crust, in `km`. Less than 0 and greater than -abyssal-elevation.")
+		abyssal     = fs.Float64("abyssal-elevation", def.AbyssalElevation, "Elevation of the abyssal plains, in `km`. Less than -ridge-elevation and greater than -trench-elevation.")
+		trench      = fs.Float64("trench-elevation", def.TrenchElevation, "Elevation of the deepest oceanic trench, in `km`. Less than -abyssal-elevation.")
+		maxCont     = fs.Float64("max-continental-elevation", def.MaxContinentalElevation, "Highest elevation of continental crust, in `km`. Greater than 0.")
 		outPath     = fs.String("out", "", "Write the datafile to this `file`, replacing it if it exists.")
 		writeConfig = fs.String("write-config", "", "Write the effective Config as JSON to this `file`, or to standard output if the value is \"-\".")
 		verbose     = fs.Bool("v", false, "Print the sample count, file size, and timings to standard error.")
@@ -211,7 +216,7 @@ and no -out, the Config is checked and written and no world is generated.
 
 The effective Config is the default Config, then the members of the
 -config file, then each of the flags from -seed to
--plate-warp-feature-size that is given. The defaults shown above are
+-max-continental-elevation that is given. The defaults shown above are
 the default Config: an Earth-like world of 942059 samples. An invalid
 Config is reported with the name of each invalid field, and nothing is
 written.
@@ -220,7 +225,7 @@ The Config file is one JSON object. This is the default Config:
 %s
 The same Config gives the same datafile, byte for byte, on the same CPU
 architecture. The default world takes about a second to generate and
-its datafile is about 57 MB.
+its datafile is about 126 MB.
 
 Example:
   yaee generate -seed 42 -out tmp/world.yaee
@@ -268,6 +273,21 @@ Example:
 			}
 			if wasSet(fs, "plate-warp-feature-size") {
 				cfg.PlateWarpFeatureSize = *warpSize
+			}
+			if wasSet(fs, "land-coverage") {
+				cfg.LandCoverage = *land
+			}
+			if wasSet(fs, "ridge-elevation") {
+				cfg.RidgeElevation = *ridge
+			}
+			if wasSet(fs, "abyssal-elevation") {
+				cfg.AbyssalElevation = *abyssal
+			}
+			if wasSet(fs, "trench-elevation") {
+				cfg.TrenchElevation = *trench
+			}
+			if wasSet(fs, "max-continental-elevation") {
+				cfg.MaxContinentalElevation = *maxCont
 			}
 			if err := cfg.Validate(); err != nil {
 				return err
@@ -341,6 +361,9 @@ colour; plates close in number have very different hues. A pixel is
 black where the pixel to its right or below it is on a different plate,
 so black lines trace the plate boundaries.
 
+-kind crust colours by the "crust_type" attribute: oceanic crust is
+blue (40, 90, 160) and continental crust is tan (190, 170, 110).
+
 A datafile without the attribute a kind needs is an error.
 
 The same datafile and width give the same PNG, byte for byte.
@@ -402,6 +425,7 @@ func defaultConfigJSON() string {
 
 // kinds maps each value of render's -kind flag to what draws it.
 var kinds = map[string]func(*yaee.World, int) (*image.NRGBA, error){
+	"crust":     render.CrustType,
 	"elevation": render.Elevation,
 	"plates":    render.Plates,
 }
@@ -414,7 +438,7 @@ func kindNames() string {
 func versionCommand() *command {
 	return &command{
 		name:    "version",
-		summary: "yaee version prints the version of the yaee library on one line, such as 0.10.0-alpha.",
+		summary: "yaee version prints the version of the yaee library on one line, such as 0.11.0-alpha.",
 		notes: `The version is what a datafile records as library_version.
 `,
 		flags: flag.NewFlagSet("version", flag.ContinueOnError),

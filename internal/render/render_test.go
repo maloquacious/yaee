@@ -312,3 +312,73 @@ func TestPlates(t *testing.T) {
 		t.Errorf("no plate attribute: got %v, want ErrNoAttribute", err)
 	}
 }
+
+func TestCrustType(t *testing.T) {
+	const width = 128
+	w := world(t, 4000, func(x, y, z float64) float64 { return 0 })
+	// Land north of the equator, ocean south of it, and one sample
+	// with a value that is not a crust type.
+	crust := w.Attribute(yaee.AttrCrustType).Uint8s
+	for i, p := range w.Positions {
+		crust[i] = yaee.CrustOceanic
+		if p[2] > 0 {
+			crust[i] = yaee.CrustContinental
+		}
+	}
+	img, err := CrustType(w, width)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := img.Bounds(); b.Dx() != width || b.Dy() != width/2 {
+		t.Fatalf("image is %dx%d, want %dx%d", b.Dx(), b.Dy(), width, width/2)
+	}
+	land, ocean := color.NRGBA{190, 170, 110, 255}, color.NRGBA{40, 90, 160, 255}
+	for row := range width / 2 {
+		for col := range width {
+			_, _, z := pixelCentre(col, row, width)
+			want := ocean
+			if z > 0 {
+				want = land
+			}
+			// Within a sample spacing of the equator the nearest
+			// sample may be on either side.
+			if got := img.NRGBAAt(col, row); math.Abs(z) > 0.1 && got != want {
+				t.Fatalf("pixel (%d, %d) at z = %v is %v, want %v", col, row, z, got, want)
+			}
+		}
+	}
+
+	for i := range crust {
+		crust[i] = 7
+	}
+	img, err = CrustType(w, 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := img.NRGBAAt(3, 3), (color.NRGBA{255, 0, 255, 255}); got != want {
+		t.Errorf("an unknown crust type is drawn %v, want %v", got, want)
+	}
+
+	// A world of generated crust draws both colours.
+	img, err = CrustType(world(t, 4000, func(x, y, z float64) float64 { return 0 }), width)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := map[color.NRGBA]int{}
+	for row := range width / 2 {
+		for col := range width {
+			count[img.NRGBAAt(col, row)]++
+		}
+	}
+	if len(count) != 2 || count[land] == 0 || count[ocean] == 0 {
+		t.Errorf("generated crust drew colours %v, want only land and ocean", count)
+	}
+
+	if _, err := CrustType(w, 15); !errors.Is(err, ErrWidth) {
+		t.Errorf("odd width: got %v, want ErrWidth", err)
+	}
+	w.Attributes = w.Attributes[:1] // the plate attribute only
+	if _, err := CrustType(w, 16); !errors.Is(err, ErrNoAttribute) {
+		t.Errorf("no crust_type attribute: got %v, want ErrNoAttribute", err)
+	}
+}

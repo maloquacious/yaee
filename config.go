@@ -37,7 +37,7 @@ const MaxPlates = 1000
 // are named by the json tags below, and decodes from that object without
 // loss:
 //
-//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500}
+//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10}
 //
 // Lengths are in kilometres (km) and times in millions of years (My).
 type Config struct {
@@ -107,12 +107,57 @@ type Config struct {
 	//
 	// It has no effect when PlateWarpAmplitude is 0.
 	PlateWarpFeatureSize float64 `json:"plate_warp_feature_size_km"`
+
+	// LandCoverage is the share of the sphere's area that is
+	// continental crust at the start.
+	// Unit: none; a fraction. Range: 0 to 1. Default: 0.3.
+	//
+	// The share achieved differs from this value by at most 1.5/N for
+	// N samples. All continental crust starts above sea level and all
+	// oceanic crust below it.
+	LandCoverage float64 `json:"land_coverage"`
+
+	// The four elevations below are constants of the model, from the
+	// paper's Table 3. Sea level is 0, and they must satisfy
+	//
+	//	TrenchElevation < AbyssalElevation < RidgeElevation < 0 < MaxContinentalElevation.
+
+	// RidgeElevation is the highest elevation of oceanic crust: that of
+	// a mid-ocean ridge (z_r).
+	// Unit: km. Range: finite, less than 0, greater than
+	// AbyssalElevation. Default: -1.
+	//
+	// The initial ocean floor is at this elevation at the coast.
+	RidgeElevation float64 `json:"ridge_elevation_km"`
+
+	// AbyssalElevation is the elevation of the abyssal plains (z_a).
+	// Unit: km. Range: finite, less than RidgeElevation, greater than
+	// TrenchElevation. Default: -6.
+	//
+	// The initial ocean floor is at this elevation 500 km or more from
+	// the coast.
+	AbyssalElevation float64 `json:"abyssal_elevation_km"`
+
+	// TrenchElevation is the elevation of the deepest oceanic trench
+	// (z_t). No elevation is below it.
+	// Unit: km. Range: finite, less than AbyssalElevation. Default: -10.
+	TrenchElevation float64 `json:"trench_elevation_km"`
+
+	// MaxContinentalElevation is the highest elevation of continental
+	// crust (z_c). No elevation is above it.
+	// Unit: km. Range: finite and greater than 0. Default: 10.
+	//
+	// The initial land is at 0.01 of this elevation at the coast and
+	// 0.05 of it 500 km or more inland.
+	MaxContinentalElevation float64 `json:"max_continental_elevation_km"`
 }
 
 // DefaultConfig returns the configuration of an Earth-like world at
 // about 25 km per sample: Seed 0, Radius 6370 km, SampleSpacing 25 km,
 // Duration 250 My, TimeStep 2 My, Plates 40, PlateWarpAmplitude 1500 km,
-// PlateWarpFeatureSize 2500 km. It passes Validate.
+// PlateWarpFeatureSize 2500 km, LandCoverage 0.3, RidgeElevation −1 km,
+// AbyssalElevation −6 km, TrenchElevation −10 km, and
+// MaxContinentalElevation 10 km. It passes Validate.
 func DefaultConfig() Config {
 	return Config{
 		Seed:                 0,
@@ -123,6 +168,12 @@ func DefaultConfig() Config {
 		Plates:               40,
 		PlateWarpAmplitude:   1500,
 		PlateWarpFeatureSize: 2500,
+
+		LandCoverage:            0.3,
+		RidgeElevation:          -1,
+		AbyssalElevation:        -6,
+		TrenchElevation:         -10,
+		MaxContinentalElevation: 10,
 	}
 }
 
@@ -174,6 +225,25 @@ func (c Config) Validate() error {
 	}
 	if !positive(c.PlateWarpFeatureSize) {
 		invalid("PlateWarpFeatureSize", "must be finite and greater than 0, got %v", c.PlateWarpFeatureSize)
+	}
+	if !(c.LandCoverage >= 0 && c.LandCoverage <= 1) {
+		invalid("LandCoverage", "must be from 0 to 1, got %v", c.LandCoverage)
+	}
+	// Each elevation is checked against the one above it, and only if
+	// that one is a number, so one wrong value is reported once.
+	finite := func(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
+	below := func(v, limit float64) bool { return v < limit || math.IsNaN(limit) }
+	if !finite(c.RidgeElevation) || !(c.RidgeElevation < 0) {
+		invalid("RidgeElevation", "must be finite and less than 0, got %v", c.RidgeElevation)
+	}
+	if !finite(c.AbyssalElevation) || !below(c.AbyssalElevation, c.RidgeElevation) {
+		invalid("AbyssalElevation", "must be finite and less than RidgeElevation (%v), got %v", c.RidgeElevation, c.AbyssalElevation)
+	}
+	if !finite(c.TrenchElevation) || !below(c.TrenchElevation, c.AbyssalElevation) {
+		invalid("TrenchElevation", "must be finite and less than AbyssalElevation (%v), got %v", c.AbyssalElevation, c.TrenchElevation)
+	}
+	if !positive(c.MaxContinentalElevation) {
+		invalid("MaxContinentalElevation", "must be finite and greater than 0, got %v", c.MaxContinentalElevation)
 	}
 	return errors.Join(errs...)
 }

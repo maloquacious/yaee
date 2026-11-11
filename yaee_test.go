@@ -42,6 +42,7 @@ func TestDefaultConfig(t *testing.T) {
 	want := yaee.Config{
 		Seed: 0, Radius: 6370, SampleSpacing: 25, Duration: 250, TimeStep: 2,
 		Plates: 40, PlateWarpAmplitude: 1500, PlateWarpFeatureSize: 2500,
+		LandCoverage: 0.3, RidgeElevation: -1, AbyssalElevation: -6, TrenchElevation: -10, MaxContinentalElevation: 10,
 	}
 	if cfg != want {
 		t.Fatalf("DefaultConfig() = %+v, want %+v", cfg, want)
@@ -53,15 +54,17 @@ func TestZeroConfigInvalid(t *testing.T) {
 	if !errors.Is(err, yaee.ErrInvalidConfig) {
 		t.Fatalf("zero Config: got %v, want ErrInvalidConfig", err)
 	}
-	// Zero is legitimate for Seed, Duration, and PlateWarpAmplitude, and
-	// for nothing else.
-	for _, field := range []string{"Radius", "SampleSpacing", "TimeStep", "Plates", "PlateWarpFeatureSize"} {
+	// Zero is legitimate for Seed, Duration, PlateWarpAmplitude, and
+	// LandCoverage, and for nothing else. A zero TrenchElevation is
+	// invalid only because it is not below the AbyssalElevation.
+	for _, field := range []string{"Radius", "SampleSpacing", "TimeStep", "Plates", "PlateWarpFeatureSize",
+		"RidgeElevation", "AbyssalElevation", "TrenchElevation", "MaxContinentalElevation"} {
 		if !strings.Contains(err.Error(), ": "+field+": ") {
 			t.Errorf("error does not name %s: %v", field, err)
 		}
 	}
-	for _, field := range []string{"Seed", "Duration", "PlateWarpAmplitude"} {
-		if strings.Contains(err.Error(), field) {
+	for _, field := range []string{"Seed", "Duration", "PlateWarpAmplitude", "LandCoverage"} {
+		if strings.Contains(err.Error(), ": "+field+": ") {
 			t.Errorf("error names %s, whose zero is valid: %v", field, err)
 		}
 	}
@@ -94,6 +97,24 @@ func TestValidateNamesField(t *testing.T) {
 		{"PlateWarpFeatureSize", func(c *yaee.Config) { c.PlateWarpFeatureSize = -2500 }},
 		{"PlateWarpFeatureSize", func(c *yaee.Config) { c.PlateWarpFeatureSize = nan }},
 		{"PlateWarpFeatureSize", func(c *yaee.Config) { c.PlateWarpFeatureSize = inf }},
+		{"LandCoverage", func(c *yaee.Config) { c.LandCoverage = -0.01 }},
+		{"LandCoverage", func(c *yaee.Config) { c.LandCoverage = 1.01 }},
+		{"LandCoverage", func(c *yaee.Config) { c.LandCoverage = nan }},
+		{"LandCoverage", func(c *yaee.Config) { c.LandCoverage = inf }},
+		{"RidgeElevation", func(c *yaee.Config) { c.RidgeElevation = 0 }},
+		{"RidgeElevation", func(c *yaee.Config) { c.RidgeElevation = 1 }},
+		{"RidgeElevation", func(c *yaee.Config) { c.RidgeElevation = inf }},
+		{"AbyssalElevation", func(c *yaee.Config) { c.AbyssalElevation = -1 }}, // equal to the ridge
+		{"AbyssalElevation", func(c *yaee.Config) { c.AbyssalElevation = -0.5 }},
+		{"AbyssalElevation", func(c *yaee.Config) { c.AbyssalElevation = nan }},
+		{"TrenchElevation", func(c *yaee.Config) { c.TrenchElevation = -6 }}, // equal to the abyssal plain
+		{"TrenchElevation", func(c *yaee.Config) { c.TrenchElevation = -5 }},
+		{"TrenchElevation", func(c *yaee.Config) { c.TrenchElevation = nan }},
+		{"TrenchElevation", func(c *yaee.Config) { c.TrenchElevation = -inf }},
+		{"MaxContinentalElevation", func(c *yaee.Config) { c.MaxContinentalElevation = 0 }},
+		{"MaxContinentalElevation", func(c *yaee.Config) { c.MaxContinentalElevation = -10 }},
+		{"MaxContinentalElevation", func(c *yaee.Config) { c.MaxContinentalElevation = nan }},
+		{"MaxContinentalElevation", func(c *yaee.Config) { c.MaxContinentalElevation = inf }},
 		{"SampleSpacing", func(c *yaee.Config) { c.SampleSpacing = 1e-300 }},
 		{"Duration", func(c *yaee.Config) { c.Duration = -1 }},
 		{"Duration", func(c *yaee.Config) { c.Duration = nan }},
@@ -130,6 +151,11 @@ func TestValidateAcceptsBoundaries(t *testing.T) {
 		func(c *yaee.Config) { c.Plates = yaee.MaxPlates },
 		func(c *yaee.Config) { c.SampleSpacing = 5000; c.Plates = 24 }, // a plate per sample
 		func(c *yaee.Config) { c.PlateWarpAmplitude = 0 },
+		func(c *yaee.Config) { c.LandCoverage = 0 },
+		func(c *yaee.Config) { c.LandCoverage = 1 },
+		func(c *yaee.Config) {
+			c.RidgeElevation, c.AbyssalElevation, c.TrenchElevation, c.MaxContinentalElevation = -1e-9, -2e-9, -3e-9, 1e-9
+		},
 	} {
 		cfg := yaee.DefaultConfig()
 		set(&cfg)
@@ -143,6 +169,7 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 	cfg := yaee.Config{
 		Seed: math.MaxUint64, Radius: 6371.0088, SampleSpacing: 0.1 + 0.2, Duration: 1e-9, TimeStep: math.Pi,
 		Plates: 7, PlateWarpAmplitude: 1e-300, PlateWarpFeatureSize: 1.0 / 3,
+		LandCoverage: 1.0 / 7, RidgeElevation: -0.1, AbyssalElevation: -math.E, TrenchElevation: -1e17, MaxContinentalElevation: 8.848,
 	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
@@ -161,7 +188,9 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	const want = `{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,` +
-		`"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500}`
+		`"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,` +
+		`"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,` +
+		`"max_continental_elevation_km":10}`
 	if string(data) != want {
 		t.Fatalf("DefaultConfig as JSON:\n got %s\nwant %s", data, want)
 	}
@@ -187,18 +216,50 @@ func TestGenerateShape(t *testing.T) {
 			t.Fatalf("z does not decrease at sample %d", i)
 		}
 	}
-	if len(w.Attributes) != 2 {
-		t.Fatalf("%d attributes, want 2", len(w.Attributes))
+	// Every attribute, in order: name, unit, type, components.
+	want := []struct {
+		name, unit string
+		typ        yaee.ElementType
+		components int
+	}{
+		{yaee.AttrPlate, "", yaee.Int32, 1},
+		{yaee.AttrCrustType, "", yaee.Uint8, 1},
+		{yaee.AttrThickness, "km", yaee.Float64, 1},
+		{yaee.AttrElevation, "km", yaee.Float64, 1},
+		{yaee.AttrOceanicAge, "My", yaee.Float64, 1},
+		{yaee.AttrRidgeDirection, "", yaee.Float64, 3},
+		{yaee.AttrOrogenyAge, "My", yaee.Float64, 1},
+		{yaee.AttrOrogenyType, "", yaee.Uint8, 1},
+		{yaee.AttrFoldDirection, "", yaee.Float64, 3},
 	}
-	plate := w.Attribute(yaee.AttrPlate)
-	if plate == nil {
-		t.Fatal("no plate attribute")
+	if len(w.Attributes) != len(want) {
+		t.Fatalf("%d attributes, want %d", len(w.Attributes), len(want))
 	}
-	if plate.Unit != "" || plate.Type != yaee.Int32 || plate.Components != 1 || len(plate.Int32s) != 500 {
-		t.Fatalf("plate is %q %v x%d with %d values", plate.Unit, plate.Type, plate.Components, len(plate.Int32s))
+	for k, wa := range want {
+		a := &w.Attributes[k]
+		if a.Name != wa.name || a.Unit != wa.unit || a.Type != wa.typ || a.Components != wa.components {
+			t.Fatalf("attribute %d is %q %q %v x%d, want %q %q %v x%d",
+				k, a.Name, a.Unit, a.Type, a.Components, wa.name, wa.unit, wa.typ, wa.components)
+		}
+		if w.Attribute(wa.name) != a {
+			t.Fatalf("Attribute(%q) is not attribute %d", wa.name, k)
+		}
+		lens := map[yaee.ElementType]int{
+			yaee.Uint8: len(a.Uint8s), yaee.Int32: len(a.Int32s), yaee.Float32: len(a.Float32s), yaee.Float64: len(a.Float64s),
+		}
+		for typ, n := range lens {
+			if typ == a.Type && n != 500*a.Components {
+				t.Fatalf("%s has %d values, want %d", a.Name, n, 500*a.Components)
+			}
+			if typ != a.Type && n != 0 {
+				t.Fatalf("%s has data in a slice its type does not select", a.Name)
+			}
+		}
 	}
+
+	plate := w.Attribute(yaee.AttrPlate).Int32s
 	used := make([]bool, cfg.Plates)
-	for i, k := range plate.Int32s {
+	for i, k := range plate {
 		if k < 0 || int(k) >= cfg.Plates {
 			t.Fatalf("sample %d has plate %d, outside 0 to %d", i, k, cfg.Plates-1)
 		}
@@ -209,29 +270,46 @@ func TestGenerateShape(t *testing.T) {
 			t.Fatalf("plate %d has no samples", k)
 		}
 	}
-	a := w.Attribute(yaee.AttrElevation)
-	if a == nil {
-		t.Fatal("no elevation attribute")
-	}
-	if a.Unit != "km" || a.Type != yaee.Float64 || a.Components != 1 || len(a.Float64s) != 500 {
-		t.Fatalf("elevation is %q %v x%d with %d values", a.Unit, a.Type, a.Components, len(a.Float64s))
-	}
-	if a.Uint8s != nil || a.Int32s != nil || a.Float32s != nil {
-		t.Fatal("elevation has data in a slice its type does not select")
-	}
-	lo, hi := math.Inf(1), math.Inf(-1)
-	for i, e := range a.Float64s {
-		p := w.Positions[i]
-		want := 4*(p[0]*p[0]-p[1]*p[1]) + 6*p[1]*p[2] - 1
-		if math.Abs(e-want) > 1e-12 {
-			t.Fatalf("elevation[%d] = %v, want %v", i, e, want)
+
+	// The initial crust: both types are present, land is above sea
+	// level and ocean below, and every value is in its documented range.
+	crust := w.Attribute(yaee.AttrCrustType).Uint8s
+	thickness := w.Attribute(yaee.AttrThickness).Float64s
+	elevation := w.Attribute(yaee.AttrElevation).Float64s
+	oceanicAge := w.Attribute(yaee.AttrOceanicAge).Float64s
+	orogenyAge := w.Attribute(yaee.AttrOrogenyAge).Float64s
+	orogeny := w.Attribute(yaee.AttrOrogenyType).Uint8s
+	var count [2]int
+	for i := range 500 {
+		z := elevation[i]
+		switch crust[i] {
+		case yaee.CrustOceanic:
+			if thickness[i] != 7 || z < cfg.AbyssalElevation || z > cfg.RidgeElevation || !(oceanicAge[i] > 0) {
+				t.Fatalf("oceanic sample %d: thickness %v, elevation %v, age %v", i, thickness[i], z, oceanicAge[i])
+			}
+		case yaee.CrustContinental:
+			if thickness[i] != 35 || z < 0.01*cfg.MaxContinentalElevation || z > 0.05*cfg.MaxContinentalElevation || oceanicAge[i] != 0 {
+				t.Fatalf("continental sample %d: thickness %v, elevation %v, age %v", i, thickness[i], z, oceanicAge[i])
+			}
+		default:
+			t.Fatalf("sample %d has crust type %d", i, crust[i])
 		}
-		lo, hi = min(lo, e), max(hi, e)
+		count[crust[i]]++
+		if orogeny[i] != yaee.OrogenyNone || orogenyAge[i] != 0 {
+			t.Fatalf("sample %d starts with orogeny type %d, age %v", i, orogeny[i], orogenyAge[i])
+		}
 	}
-	// The placeholder must put some samples below sea level and some
-	// above, or images of it show nothing.
-	if lo > -3 || hi < 2 {
-		t.Fatalf("elevation spans %v to %v km; want both ocean and land", lo, hi)
+	// Samples have nearly equal areas, so 0.3 of the area is about 150
+	// of 500 samples.
+	if count[yaee.CrustContinental] < 140 || count[yaee.CrustContinental] > 160 {
+		t.Fatalf("%d of 500 samples are continental; want about 150", count[yaee.CrustContinental])
+	}
+	for _, name := range []string{yaee.AttrRidgeDirection, yaee.AttrFoldDirection} {
+		for i, v := range w.Attribute(name).Float64s {
+			if v != 0 {
+				t.Fatalf("%s[%d] = %v, want 0", name, i, v)
+			}
+		}
 	}
 	if w.Attribute("no such attribute") != nil {
 		t.Fatal("Attribute returned a value for an unknown name")
