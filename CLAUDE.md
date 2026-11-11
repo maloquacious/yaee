@@ -27,7 +27,8 @@ When a choice trades data quality against picture quality, data wins.
 The basis is *Procedural Tectonic Planets* (Cortial, Peytavie, Galin, Guérin; Computer Graphics Forum 38(2), 2019; hal-02136820).
 A copy belongs at `docs/research/2019-Procedural-Tectonic-Planets.pdf`.
 `*.pdf` is git-ignored, so a fresh clone lacks it: `docs/research/papers.md` lists every reference paper with its citation and download link.
-Save each PDF into `docs/research/` under the name used there.
+If you need to retrieve a paper, save it into `docs/research/` under the file name at the end of its link; do not rename it.
+PDFs already in that directory may have been renamed by the user, so check for a paper by its year and title before downloading it again.
 
 Read the relevant section of the paper before implementing or changing an algorithm, and cite the section in the code comment.
 Where we depart from the paper, say so in the comment and say why.
