@@ -11,7 +11,8 @@ Early alpha. **It simulates only part of tectonics yet.**
 The sphere, the public API, the datafile format, and the command work at full scale.
 A generated world has plates and crust, continents and oceans, and its plates drift for the configured time.
 Where plates part, new ocean floor forms at the ridge between them, and ocean floor sinks as it ages.
-Nothing happens yet where plates meet: no trench or mountain is formed.
+Where plates meet, one subducts beneath the other: a trench forms along the front, the overriding plate is raised into mountains, and land erodes.
+Continents do not collide yet, and plates do not split.
 [PLAN.md](PLAN.md) lists what is built and what comes next.
 Until the first tagged release, the API and the datafile format may change without notice.
 
@@ -58,6 +59,7 @@ go run ./cmd/yaee render -in tmp/world.yaee -out tmp/world.png
 go run ./cmd/yaee render -in tmp/world.yaee -kind plates -out tmp/plates.png
 go run ./cmd/yaee render -in tmp/world.yaee -kind crust -out tmp/crust.png
 go run ./cmd/yaee render -in tmp/world.yaee -kind age -out tmp/age.png
+go run ./cmd/yaee render -in tmp/world.yaee -kind orogeny -out tmp/orogeny.png
 go run ./cmd/yaee help
 ```
 

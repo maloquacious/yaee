@@ -99,7 +99,8 @@ func TestResampleAtRest(t *testing.T) {
 	if !snap(w).equal(before) {
 		t.Fatal("resampling changed a world before any plate had moved")
 	}
-	// The simulation then only ages the ocean.
+	// The simulation then only ages the ocean, erodes the land, and ages
+	// the orogeny.
 	w = moving(t, 6000, 3, params)
 	decorate(w)
 	aged := moving(t, 6000, 3, params)
@@ -108,12 +109,20 @@ func TestResampleAtRest(t *testing.T) {
 		if err := AgeOcean(t.Context(), aged, 2); err != nil {
 			t.Fatal(err)
 		}
+		if err := Erode(t.Context(), aged, 2); err != nil {
+			t.Fatal(err)
+		}
+		for i, kind := range aged.OrogenyType {
+			if kind != model.OrogenyNone {
+				aged.OrogenyAge[i] += 2
+			}
+		}
 	}
 	if n, err := simulate(t.Context(), w, 500); err != nil || n != 0 {
 		t.Fatalf("simulate: %d resamplings, error %v; want none", n, err)
 	}
 	if !snap(w).equal(snap(aged)) {
-		t.Fatal("the simulation did more than age the ocean of a world in which nothing moves")
+		t.Fatal("the simulation did more than age and erode a world in which nothing moves")
 	}
 	if snap(w).equal(before) {
 		t.Fatal("the simulation did not age the ocean")

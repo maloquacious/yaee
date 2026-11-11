@@ -18,8 +18,9 @@ import (
 //
 // For every sample, at its position q:
 //
-//  1. The plates that hold q are found with Query. A plate is skipped
-//     without a query if q is outside the plate's bounding cap: the
+//  1. The plates that hold q are found with Query. A plate holds nothing
+//     where its crust has been subducted (World.Subducted). A plate is
+//     skipped without a query if q is outside the plate's bounding cap: the
 //     smallest cap about the plate's mean position that contains every
 //     sample of the plate and every neighbour of one, turned with the
 //     plate.
@@ -33,8 +34,11 @@ import (
 //     that oceanic and continental crust are never blended: the coast
 //     stays a step in elevation and thickness, and oceanic age is not
 //     averaged with the 0 of continental crust;
-//     - thickness, elevation, oceanic age, and orogeny age are the
+//     - thickness, elevation, oceanic age, uplift, and trench are the
 //     weighted sums of the corners' values;
+//     - orogeny age is the weighted sum over the corners whose orogeny
+//     type is not none, with their weights scaled to sum to 1, so that
+//     it is not averaged with the 0 of crust that has no orogeny;
 //     - ridge direction and fold direction are the weighted sums of the
 //     corners' vectors, turned by the plate's rotation and projected
 //     onto the tangent plane at q; the ridge direction is then scaled
@@ -43,15 +47,19 @@ import (
 //     and ridge direction zero on continental crust, and orogeny age 0
 //     where the orogeny type is none. If the plate has not turned and q
 //     is one of its samples, the sample's values are copied unchanged.
-//  3. If several plates hold q, the plates have converged. Placeholder,
-//     replaced by subduction in issue #6: the sample takes its crust
-//     from one of them as in step 2, a plate whose crust at q is
-//     continental before one whose crust is oceanic, and the
-//     lowest-numbered plate among those.
+//  3. If several plates hold q, the plates have converged and
+//     Subduction.Advance has not yet marked the crust of all but one as
+//     subducted. The sample takes its crust as in step 2 from the plate
+//     whose crust at q Overrides the crust of each of the others, a
+//     plate's crust type at q being that of the corner of step 2 with
+//     the greatest weight. The crust of the others is discarded.
 //  4. If no plate holds q, the plates have diverged, and the sample is
 //     in a gap. It gets new oceanic crust; see "Oceanic crust" below.
 //
-// Each sample then belongs to the plate its crust came from.
+// Each sample then belongs to the plate its crust came from, and no
+// sample is marked as subducted. World.PlateOceanAge is set from the new
+// samples (PlateOceanAges); steps 1 to 4 use the ages it held before, or
+// those of the old samples if it held none.
 //
 //  5. A plate whose fastest sample would now move faster than
 //     MaxPlateSpeed has its angular speed lowered until that sample
@@ -111,7 +119,8 @@ import (
 //     samples of an uneven plate edge are nearest, and without it the
 //     direction is uneven by 5° on average and over 20° at worst. The
 //     direction is zero if a vector along the way is shorter than 10⁻⁹;
-//   - the crust is oceanic, 7 km thick, with no orogeny and no fold;
+//   - the crust is oceanic, 7 km thick, with no orogeny, fold, uplift,
+//     or trench;
 //   - the sample joins plate A, so the ridge becomes the boundary
 //     between the plates.
 //
@@ -142,6 +151,10 @@ func Resample(ctx context.Context, w *model.World, elapsed float64) error {
 	n := len(mesh.Points)
 
 	centre, cosine := plateCaps(w)
+	ocean := w.PlateOceanAge
+	if len(ocean) != w.NumPlates {
+		ocean = PlateOceanAges(w)
+	}
 	inverse := make([]sphere.Rotation, w.NumPlates)
 	turned := make([]bool, w.NumPlates)
 	for k, r := range w.PlateRotation {
@@ -160,6 +173,8 @@ func Resample(ctx context.Context, w *model.World, elapsed float64) error {
 		OrogenyAge:     make([]float64, n),
 		OrogenyType:    make([]uint8, n),
 		FoldDirection:  make([]sphere.Vec, n),
+		Uplift:         make([]float64, n),
+		Trench:         make([]float64, n),
 	}
 	err := model.ParallelRange(ctx, n, func(lo, hi int) {
 		for i := lo; i < hi; i++ {
@@ -181,17 +196,15 @@ func Resample(ctx context.Context, w *model.World, elapsed float64) error {
 					continue
 				}
 				cs := mesh.Tri[3*tri : 3*tri+3]
-				c := 0
-				for j := 1; j < 3; j++ {
-					if wts[j] > wts[c] || wts[j] == wts[c] && cs[j] < cs[c] {
-						c = j
+				c := nearestCorner(cs, wts)
+				// Step 3: the crust that overrides the others stays.
+				if plate >= 0 {
+					mine, theirs := cs[c], corners[nearest]
+					if !Overrides(w.CrustType[mine], ocean[k], k, w.CrustType[theirs], ocean[plate], plate) {
+						continue
 					}
 				}
-				// Placeholder for subduction (#6): continental crust
-				// stays on top, then the lowest-numbered plate.
-				if plate < 0 || w.CrustType[cs[c]] == model.Continental && w.CrustType[corners[nearest]] == model.Oceanic {
-					plate, corners, weights, nearest = k, cs, wts, c
-				}
+				plate, corners, weights, nearest = k, cs, wts, c
 			}
 
 			next.Plate[i] = plate
@@ -210,6 +223,8 @@ func Resample(ctx context.Context, w *model.World, elapsed float64) error {
 				next.OrogenyAge[i] = w.OrogenyAge[s]
 				next.OrogenyType[i] = w.OrogenyType[s]
 				next.FoldDirection[i] = w.FoldDirection[s]
+				next.Uplift[i] = w.Uplift[s]
+				next.Trench[i] = w.Trench[s]
 				continue
 			}
 			a, b, c := corners[0], corners[1], corners[2]
@@ -235,7 +250,9 @@ func Resample(ctx context.Context, w *model.World, elapsed float64) error {
 			next.CrustType[i] = w.CrustType[s]
 			next.OrogenyType[i] = w.OrogenyType[s]
 			next.Thickness[i] = blend(w.Thickness)
-			next.Elevation[i] = blend(w.Elevation)
+			// Rounding can carry a blend a few units in the last place
+			// past its corners, and so past the limits they keep.
+			next.Elevation[i] = max(w.TrenchElevation, min(w.MaxContinentalElevation, blend(w.Elevation)))
 			next.FoldDirection[i] = direction(w.FoldDirection)
 			if next.CrustType[i] == model.Oceanic {
 				next.OceanicAge[i] = blend(w.OceanicAge)
@@ -243,8 +260,18 @@ func Resample(ctx context.Context, w *model.World, elapsed float64) error {
 					next.RidgeDirection[i] = r.Normalize()
 				}
 			}
+			next.Uplift[i] = blend(w.Uplift)
+			next.Trench[i] = blend(w.Trench)
 			if next.OrogenyType[i] != model.OrogenyNone {
-				next.OrogenyAge[i] = blend(w.OrogenyAge)
+				// Among the corners that have an orogeny.
+				var age, share float64
+				for j, corner := range corners {
+					if w.OrogenyType[corner] != model.OrogenyNone {
+						age += weights[j] * w.OrogenyAge[corner]
+						share += weights[j]
+					}
+				}
+				next.OrogenyAge[i] = age / share
 			}
 		}
 	})
@@ -266,9 +293,13 @@ func Resample(ctx context.Context, w *model.World, elapsed float64) error {
 	w.OrogenyAge = next.OrogenyAge
 	w.OrogenyType = next.OrogenyType
 	w.FoldDirection = next.FoldDirection
+	w.Uplift = next.Uplift
+	w.Trench = next.Trench
+	clear(w.Subducted)
 	for k := range w.PlateRotation {
 		w.PlateRotation[k] = sphere.Identity()
 	}
+	w.PlateOceanAge = PlateOceanAges(w)
 	limitSpeeds(w) // step 5
 	return nil
 }

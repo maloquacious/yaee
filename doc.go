@@ -34,9 +34,11 @@
 // As of this version the initial plates and crust are generated, and
 // the plates then move as rigid bodies for Config.Duration, carrying
 // their crust. Where plates part, new oceanic crust forms at the ridge
-// between them, and all oceanic crust ages and sinks. Nothing happens
-// yet where plates meet: one plate's crust replaces the other's, and no
-// trench or mountain is formed.
+// between them, and all oceanic crust ages and sinks. Where plates
+// meet, one subducts beneath the other: a trench forms along the front,
+// the overriding plate is raised, and land erodes. Continents do not
+// collide yet: where two meet, the crust of one is consumed. Plates do
+// not split yet.
 //
 // The tectonic model is that of
 //

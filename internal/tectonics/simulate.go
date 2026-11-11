@@ -34,14 +34,26 @@ const resampleDistance = 500.0
 // steps add up to Duration exactly. With Duration 0 the stage does
 // nothing.
 //
-// Each step moves every plate with Advance and carries the oceanic
-// crust through the step with AgeOcean. The world is then resampled
-// with Resample if the fastest sample of any plate has moved
-// resampleDistance km or more since the last resampling, counting each
-// step as that step's length times the speed of the fastest sample at
-// its start. After the last step the world is resampled if any plate
-// has moved at all, so the stage always leaves the crust on the fixed
-// samples, with every plate's rotation the identity.
+// Each step of dt My does these in order:
+//
+//  1. Subduction.Advance moves every plate and marks the crust that has
+//     gone beneath another plate (§4.1).
+//  2. AgeOcean ages and dampens the oceanic crust (§4.5).
+//  3. Subduction.Fronts finds the subduction fronts.
+//  4. Subduction.Uplift raises the overriding plates and updates fold
+//     direction and orogeny (§4.1).
+//  5. Subduction.Trenches fills and forms the oceanic trenches (§4.5).
+//  6. Erode applies continental erosion (§4.5).
+//  7. Subduction.SlabPull turns the axes of the subducting plates
+//     (§4.1), which changes how they move from the next step on.
+//
+// The world is then resampled with Resample if the fastest sample of any
+// plate has moved resampleDistance km or more since the last
+// resampling, counting each step as that step's length times the speed
+// of the fastest sample at its start. After the last step the world is
+// resampled if any plate has moved at all, so the stage always leaves
+// the crust on the fixed samples, with every plate's rotation the
+// identity and no sample marked as subducted.
 //
 // The stage draws no random numbers yet.
 type Simulation struct{}
@@ -77,7 +89,7 @@ func Steps(duration, timeStep float64) int {
 // has moved distance km. It returns the number of resamplings.
 func simulate(ctx context.Context, w *model.World, distance float64) (resamplings int, err error) {
 	steps := Steps(w.Duration, w.TimeStep)
-	speed := maxSpeed(w)
+	sub := NewSubduction(w)
 	var moved float64   // km, since the last resampling
 	var elapsed float64 // My, since the last resampling
 	for s := range steps {
@@ -88,20 +100,44 @@ func simulate(ctx context.Context, w *model.World, distance float64) (resampling
 		if s == steps-1 {
 			dt = w.Duration - float64(steps-1)*w.TimeStep
 		}
-		Advance(w, dt)
-		if err := AgeOcean(ctx, w, dt); err != nil {
+		moved += maxSpeed(w) * dt
+		elapsed += dt
+		if err := sub.Step(ctx, w, dt); err != nil {
 			return resamplings, err
 		}
-		moved += speed * dt
-		elapsed += dt
 		if moved >= distance || s == steps-1 && moved > 0 {
 			if err := Resample(ctx, w, elapsed); err != nil {
 				return resamplings, err
 			}
+			sub.Reset(w)
 			resamplings++
 			moved, elapsed = 0, 0
-			speed = maxSpeed(w)
 		}
 	}
 	return resamplings, nil
+}
+
+// Step carries the world through one time step of dt My: the seven
+// actions that Simulation lists, in that order.
+func (s *Subduction) Step(ctx context.Context, w *model.World, dt float64) error {
+	if err := s.Advance(ctx, w, dt); err != nil {
+		return err
+	}
+	if err := AgeOcean(ctx, w, dt); err != nil {
+		return err
+	}
+	if err := s.Fronts(ctx, w); err != nil {
+		return err
+	}
+	if err := s.Uplift(ctx, w, dt); err != nil {
+		return err
+	}
+	if err := s.Trenches(ctx, w, dt); err != nil {
+		return err
+	}
+	if err := Erode(ctx, w, dt); err != nil {
+		return err
+	}
+	s.SlabPull(w, dt)
+	return nil
 }

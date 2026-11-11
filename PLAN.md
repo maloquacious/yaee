@@ -312,6 +312,37 @@ Done when:
 - Slab pull moves a plate's rotation axis toward its subduction front and leaves it unit length.
 - In a full-scale run, mountain ranges appear along convergent continental margins and trenches along the fronts, and the reviewer accepts the images.
 
+**Built** in version 0.15.0-alpha; the reviewer has not yet accepted the images. The code is `internal/tectonics/subduction.go`, the overlap rule of `Resample`, and `render.Orogeny`.
+
+What was built, where the paper and the plan left a choice:
+
+- Subduction is resolved every time step, not at resampling (option 1 of #6). `Subduction.Advance` marks a sample as subducted when it lies beneath overriding crust of another plate at the end of a step, or at points no more than half a sample spacing apart along its path during the step. A plate holds nothing where its crust is subducted. This removed the footprints and the rows of teeth recorded after milestone 5.
+- Which crust subducts (`Overrides`): oceanic beneath continental; of two oceanic crusts, that of the plate whose mean oceanic age at the last resampling is greater, the higher-numbered plate at equal ages; of two continental crusts, that of the higher-numbered plate. Comparing ages sample by sample made two plates consume parts of each other.
+- Continental crust that meets continental crust is consumed until milestone 7 exists. The continental share of the default world falls from 0.30 to 0.17.
+- A subduction front is the samples on the edge of an overriding plate that lie over another plate's subducted or overridden crust, where that plate moves into the edge with at least 0.3 of the relative speed. The edge's outward direction is measured over 4 sample spacings: over the nearest neighbours alone it is up to 33° off, and plates sliding past each other were given fronts.
+- d(p) is the distance to the nearest front sample, found by spreading through the plate's samples and bounded by r_s. It is within 1.5 sample spacings of the true distance. It is recomputed only for plates whose front changed.
+- f is two cubic smoothsteps: 0 at the front, 1 at d_0 = r_s/6, 0 at r_s. g is v/v_0, not limited to 1. h is the paper's z̃², with the elevation of the subducting crust taken at the nearest front sample, not at p.
+- Uplift is multiplied by 1 − max(z, 0)/z_c, and elevation is limited to z_c. The paper gives no limit.
+- The applied uplift rate of the last step is kept per sample and written as the `uplift` attribute.
+- Fold direction gains β (s_P − s_Q) δt with β = 0.01 My/km. Orogeny becomes Andean with age 0 when uplifted crust emerges, or is raised above sea level with no orogeny; the age then counts from that moment, also while uplift continues. Crust type is not changed.
+- Slab pull uses ε = 10⁻⁶ per km of front per My, multiplied by the sample spacing so that it does not depend on resolution (within 20% between two spacings). The plate's angular speed is rescaled so that its fastest sample keeps its speed; with the paper's rule nearly every subducting plate ended at v_0.
+- A trench is a state, not a rate: oceanic crust of the subducting plate within 150 km of a front is lowered to z_t at the front, rising with the square of the distance. Sediment accretion raises a trench that is no longer being formed at ε_t until it is gone.
+- Continental erosion is the paper's formula as written, for continental crust above sea level only. It is 0.0045 km from the closed form for 10 km of land over 250 My.
+- `SubductionDistance` (r_s, 1800 km), `SubductionUplift` (u_0, 0.6 km/My), `ContinentalErosion` (ε_c, 0.03 km/My), and `SedimentAccretion` (ε_t, 0.3 km/My) are `Config` fields with the paper's values. d_0, β, ε, the trench width, and the front's convergence share are constants in the code.
+- `yaee render -kind orogeny` draws orogeny type and age.
+
+Measured at full scale (942,059 samples, 250 My, 125 steps) on the development machine:
+
+| Measure | Value |
+|---------|-------|
+| `yaee generate` | 24.5 s, 624 MB peak resident memory |
+| Datafile | 133,773,268 bytes |
+| Runs with `GOMAXPROCS=1` and with the default | Identical datafile bytes |
+| Continental elevation, seed 1 | median 3.9 km, 90th percentile 6.0 km, maximum 8.1 km |
+| Samples above sea level, seed 1 | 0.187 of all; 0.019 of all are oceanic crust above sea level |
+
+For milestone 9: with the paper's constants the default world's land is far too high. r_s of 1800 km reaches across most continents, u_0 is 20 times ε_c, and the young ocean that subducts is shallow, which makes h large. Away from any front, erosion alone halves the initial land, from 0.1 km to 0.047 km in 250 My.
+
 ### 7. Continental collision
 
 Tracked by [#7](https://github.com/maloquacious/yaee/issues/7), with sub-issues #27 and #28.

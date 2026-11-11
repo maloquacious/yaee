@@ -473,3 +473,91 @@ func TestOceanicAge(t *testing.T) {
 		t.Errorf("no crust_type attribute: got %v, want ErrNoAttribute", err)
 	}
 }
+
+func TestOrogenyColour(t *testing.T) {
+	magenta := color.NRGBA{255, 0, 255, 255}
+	for _, c := range []struct {
+		crust, kind uint8
+		my          float64
+		want        color.NRGBA
+	}{
+		{yaee.CrustOceanic, yaee.OrogenyNone, 0, color.NRGBA{200, 215, 230, 255}},
+		{yaee.CrustContinental, yaee.OrogenyNone, 0, color.NRGBA{225, 225, 225, 255}},
+		{yaee.CrustContinental, yaee.OrogenyNone, math.NaN(), color.NRGBA{225, 225, 225, 255}},
+		{7, yaee.OrogenyNone, 0, magenta},
+		{yaee.CrustContinental, yaee.OrogenyAndean, 0, color.NRGBA{165, 15, 21, 255}},
+		{yaee.CrustOceanic, yaee.OrogenyAndean, 0, color.NRGBA{165, 15, 21, 255}},
+		{yaee.CrustContinental, yaee.OrogenyAndean, 125, color.NRGBA{209, 101, 91, 255}},
+		{yaee.CrustContinental, yaee.OrogenyAndean, 250, color.NRGBA{252, 187, 161, 255}},
+		{yaee.CrustContinental, yaee.OrogenyAndean, math.Inf(1), color.NRGBA{252, 187, 161, 255}},
+		{yaee.CrustContinental, yaee.OrogenyHimalayan, 0, color.NRGBA{63, 0, 125, 255}},
+		{yaee.CrustContinental, yaee.OrogenyHimalayan, 125, color.NRGBA{126, 95, 173, 255}},
+		{yaee.CrustContinental, yaee.OrogenyHimalayan, 1e9, color.NRGBA{188, 189, 220, 255}},
+		{yaee.CrustContinental, yaee.OrogenyAndean, -1, magenta},
+		{yaee.CrustContinental, yaee.OrogenyHimalayan, math.NaN(), magenta},
+		{yaee.CrustContinental, 3, 10, magenta},
+	} {
+		if got := OrogenyColour(c.crust, c.kind, c.my); got != c.want {
+			t.Errorf("OrogenyColour(%d, %d, %v) = %v, want %v", c.crust, c.kind, c.my, got, c.want)
+		}
+	}
+}
+
+func TestOrogeny(t *testing.T) {
+	const width = 128
+	w := world(t, 4000, func(x, y, z float64) float64 { return 0 })
+	// Ocean south of the equator; north of it land, with an Andean
+	// orogeny of 40 My north of 30° north and a Himalayan one of 90 My
+	// north of 60° north.
+	crust := w.Attribute(yaee.AttrCrustType).Uint8s
+	kind := w.Attribute(yaee.AttrOrogenyType).Uint8s
+	age := w.Attribute(yaee.AttrOrogenyAge).Float64s
+	at := func(z float64) (uint8, uint8, float64) {
+		switch {
+		case z > 0.866:
+			return yaee.CrustContinental, yaee.OrogenyHimalayan, 90
+		case z > 0.5:
+			return yaee.CrustContinental, yaee.OrogenyAndean, 40
+		case z > 0:
+			return yaee.CrustContinental, yaee.OrogenyNone, 0
+		}
+		return yaee.CrustOceanic, yaee.OrogenyNone, 0
+	}
+	for i, p := range w.Positions {
+		crust[i], kind[i], age[i] = at(p[2])
+	}
+	img, err := Orogeny(w, width)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := img.Bounds(); b.Dx() != width || b.Dy() != width/2 {
+		t.Fatalf("image is %dx%d, want %dx%d", b.Dx(), b.Dy(), width, width/2)
+	}
+	seen := map[color.NRGBA]int{}
+	for row := range width / 2 {
+		for col := range width {
+			_, _, z := pixelCentre(col, row, width)
+			if math.Abs(z) < 0.1 || math.Abs(z-0.5) < 0.1 || math.Abs(z-0.866) < 0.1 {
+				continue // either side of a border
+			}
+			got, want := img.NRGBAAt(col, row), OrogenyColour(at(z))
+			if got != want {
+				t.Fatalf("pixel (%d, %d) at z = %v is %v, want %v", col, row, z, got, want)
+			}
+			seen[got]++
+		}
+	}
+	if len(seen) != 4 {
+		t.Fatalf("%d colours in the image, want 4: %v", len(seen), seen)
+	}
+
+	if _, err := Orogeny(w, 15); !errors.Is(err, ErrWidth) {
+		t.Errorf("odd width: got %v, want ErrWidth", err)
+	}
+	for _, name := range []string{yaee.AttrOrogenyAge, yaee.AttrOrogenyType, yaee.AttrCrustType} {
+		w.Attribute(name).Name = "renamed"
+		if _, err := Orogeny(w, 16); !errors.Is(err, ErrNoAttribute) {
+			t.Errorf("no %s attribute: got %v, want ErrNoAttribute", name, err)
+		}
+	}
+}

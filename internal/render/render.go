@@ -198,6 +198,83 @@ func AgeColour(my float64) color.NRGBA {
 	return color.NRGBA{R: mix(0), G: mix(1), B: mix(2), A: 255}
 }
 
+// Orogeny draws the type and age of the world's mountain building as an
+// equirectangular image with the size and layout that Elevation
+// documents. A pixel takes its colour from the sample nearest to its
+// centre: OrogenyColour of that sample's crust type, orogeny type, and
+// orogeny age.
+//
+// Mountain ranges raised by subduction are red and those raised by
+// continental collision violet, darkest where the mountain building is
+// most recent.
+func Orogeny(w *yaee.World, width int) (*image.NRGBA, error) {
+	crust := w.Attribute(yaee.AttrCrustType)
+	if crust == nil || crust.Type != yaee.Uint8 || crust.Components != 1 || len(crust.Uint8s) != w.NumSamples() {
+		return nil, attributeError(w, yaee.AttrCrustType, "uint8")
+	}
+	kind := w.Attribute(yaee.AttrOrogenyType)
+	if kind == nil || kind.Type != yaee.Uint8 || kind.Components != 1 || len(kind.Uint8s) != w.NumSamples() {
+		return nil, attributeError(w, yaee.AttrOrogenyType, "uint8")
+	}
+	age := w.Attribute(yaee.AttrOrogenyAge)
+	if age == nil || age.Type != yaee.Float64 || age.Components != 1 || len(age.Float64s) != w.NumSamples() {
+		return nil, attributeError(w, yaee.AttrOrogenyAge, "float64")
+	}
+	grid, err := nearestSamples(w, width)
+	if err != nil {
+		return nil, err
+	}
+	return paint(grid, width, func(sample int32) color.NRGBA {
+		return OrogenyColour(crust.Uint8s[sample], kind.Uint8s[sample], age.Float64s[sample])
+	}), nil
+}
+
+// OldestOrogeny is the age in My at which the colours of OrogenyColour
+// end.
+const OldestOrogeny = 250.0
+
+// OrogenyColour returns the colour of a sample with the given crust
+// type, orogeny type, and orogeny age in My:
+//
+//	OrogenyNone       oceanic crust (200, 215, 230), a pale blue;
+//	                  continental crust (225, 225, 225), a pale grey
+//	OrogenyAndean     a straight line from (165, 15, 21), dark red, at
+//	                  0 My to (252, 187, 161), pale red, at OldestOrogeny
+//	                  and above
+//	OrogenyHimalayan  a straight line from (63, 0, 125), dark violet, at
+//	                  0 My to (188, 189, 220), pale violet, at
+//	                  OldestOrogeny and above
+//
+// Any other orogeny type; with OrogenyNone, any other crust type; and
+// with an orogeny, a negative age or NaN, are magenta, (255, 0, 255).
+// Each channel is rounded to the nearest integer. Alpha is always 255.
+func OrogenyColour(crust, kind uint8, my float64) color.NRGBA {
+	magenta := color.NRGBA{R: 255, G: 0, B: 255, A: 255}
+	var from, to [3]float64
+	switch kind {
+	case yaee.OrogenyNone:
+		switch crust {
+		case yaee.CrustOceanic:
+			return color.NRGBA{R: 200, G: 215, B: 230, A: 255}
+		case yaee.CrustContinental:
+			return color.NRGBA{R: 225, G: 225, B: 225, A: 255}
+		}
+		return magenta
+	case yaee.OrogenyAndean:
+		from, to = [3]float64{165, 15, 21}, [3]float64{252, 187, 161}
+	case yaee.OrogenyHimalayan:
+		from, to = [3]float64{63, 0, 125}, [3]float64{188, 189, 220}
+	default:
+		return magenta
+	}
+	if math.IsNaN(my) || my < 0 {
+		return magenta
+	}
+	t := min(my/OldestOrogeny, 1)
+	mix := func(c int) uint8 { return uint8(math.Round(from[c] + (to[c]-from[c])*t)) }
+	return color.NRGBA{R: mix(0), G: mix(1), B: mix(2), A: 255}
+}
+
 // attributeError describes a missing or unusable attribute.
 func attributeError(w *yaee.World, name, want string) error {
 	a := w.Attribute(name)

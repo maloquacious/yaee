@@ -43,6 +43,11 @@ type Params struct {
 	MaxPlateSpeed float64 // km/My; v0 of the paper's Table 3
 
 	OceanicDampening float64 // km/My; ε_o of the paper's Table 3
+
+	SubductionDistance float64 // km; r_s
+	SubductionUplift   float64 // km/My; u_0
+	ContinentalErosion float64 // km/My; ε_c
+	SedimentAccretion  float64 // km/My; ε_t
 }
 
 // Values of World.CrustType.
@@ -98,6 +103,12 @@ type World struct {
 	// resampling.
 	PlateRotation []sphere.Rotation
 
+	// PlateOceanAge is, for each plate, the mean oceanic age in My of
+	// its oceanic samples as they were at the last resampling. It
+	// decides which of two oceanic plates subducts. It is nil until the
+	// simulation first needs it.
+	PlateOceanAge []float64
+
 	// The crust at each sample: the parameters of the paper's Table 1.
 
 	// CrustType is Oceanic or Continental (x_C).
@@ -130,6 +141,23 @@ type World struct {
 	// vector tangent to the sphere at the sample, or the zero vector
 	// where the crust has not been folded.
 	FoldDirection []sphere.Vec
+
+	// Working data of subduction (§4.1), beyond the paper's Table 1.
+
+	// Subducted marks the samples whose crust has gone beneath another
+	// plate since the last resampling. Such a sample still belongs to
+	// its plate and moves with it, but its plate no longer holds
+	// anything where the sample is. Resampling clears every mark.
+	Subducted []bool
+
+	// Uplift is the rate at which subduction raised each sample in the
+	// latest time step, in km/My (ũ). It is 0 where nothing was raised.
+	Uplift []float64
+
+	// Trench is how far each sample has been lowered into an oceanic
+	// trench, in km. It is at least 0, and 0 outside a trench. The
+	// sample's elevation without the trench is Elevation + Trench.
+	Trench []float64
 }
 
 // NewWorld returns a World over the mesh with every per-sample slice
@@ -150,6 +178,9 @@ func NewWorld(mesh *sphere.Mesh, params Params) *World {
 		OrogenyAge:     make([]float64, n),
 		OrogenyType:    make([]uint8, n),
 		FoldDirection:  make([]sphere.Vec, n),
+		Subducted:      make([]bool, n),
+		Uplift:         make([]float64, n),
+		Trench:         make([]float64, n),
 	}
 }
 

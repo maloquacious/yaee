@@ -32,6 +32,11 @@ func earth() model.Params {
 		MaxPlateSpeed: 100,
 
 		OceanicDampening: 0.04,
+
+		SubductionDistance: 1800,
+		SubductionUplift:   0.6,
+		ContinentalErosion: 0.03,
+		SedimentAccretion:  0.3,
 	}
 }
 

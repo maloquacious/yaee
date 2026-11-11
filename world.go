@@ -80,12 +80,10 @@ const (
 	// Type Float64, 1 component, unit "km". Negative below sea level.
 	// Range: Config.TrenchElevation to Config.MaxContinentalElevation.
 	//
-	// As of this version plates move but nothing raises or lowers the
-	// crust, so every elevation is one the initial crust had or lies
-	// between two of them: Config.AbyssalElevation to
-	// Config.RidgeElevation for oceanic crust, and 0.01 to 0.05 of
-	// Config.MaxContinentalElevation for continental crust, or between
-	// those ranges within a sample spacing of a coast.
+	// Oceanic crust sinks toward Config.TrenchElevation as it ages and
+	// is at Config.TrenchElevation in a trench at a subduction front.
+	// Crust behind a subduction front is raised, and land is eroded
+	// toward 0. Oceanic crust may be above 0 where it has been raised.
 	AttrElevation = "elevation"
 
 	// AttrOceanicAge is the time since oceanic crust formed at a ridge
@@ -98,14 +96,12 @@ const (
 	// of World.Positions), no unit. It is a unit vector perpendicular
 	// to the sample's position, or (0, 0, 0) where no direction is
 	// known. It is (0, 0, 0) for continental crust.
-	//
-	// As of this version it is (0, 0, 0) for every sample.
 	AttrRidgeDirection = "ridge_direction"
 
 	// AttrOrogenyAge is the time since the mountain building that last
 	// affected the sample began (a_c). Type Float64, 1 component, unit
-	// "My". Range: at least 0. It is 0 where the orogeny type is
-	// OrogenyNone.
+	// "My". Range: 0 to Config.Duration. It is 0 where the orogeny type
+	// is OrogenyNone.
 	AttrOrogenyAge = "orogeny_age"
 
 	// AttrOrogenyType is the kind of mountain building that last
@@ -113,7 +109,10 @@ const (
 	// Values: OrogenyNone (0), OrogenyAndean (1), or OrogenyHimalayan
 	// (2).
 	//
-	// As of this version it is OrogenyNone for every sample.
+	// A sample becomes OrogenyAndean, with orogeny age 0, when
+	// subduction raises it above sea level, or raises it while it is
+	// above sea level and has no orogeny type. As of this version no
+	// sample is OrogenyHimalayan.
 	AttrOrogenyType = "orogeny_type"
 
 	// AttrFoldDirection is the direction in which the crust is folded
@@ -122,8 +121,18 @@ const (
 	// sample's position, not necessarily of length 1, or (0, 0, 0)
 	// where the crust is not folded.
 	//
-	// As of this version it is (0, 0, 0) for every sample.
+	// Behind a subduction front it points the way the subducting plate
+	// moves relative to the sample's plate, and its length is the
+	// distance the two plates have converged while the sample was
+	// behind a front, in units of 100 km.
 	AttrFoldDirection = "fold_direction"
+
+	// AttrUplift is the rate at which subduction raised the sample in
+	// the last time step of the simulation (ũ). Type Float64, 1
+	// component, unit "km/My". Range: 0 to 2 × Config.SubductionUplift.
+	// It is 0 where nothing was raised, and for every sample when
+	// Config.Duration is 0.
+	AttrUplift = "uplift"
 )
 
 // Values of the AttrCrustType attribute.

@@ -206,6 +206,10 @@ func generateCommand() *command {
 		maxCont     = fs.Float64("max-continental-elevation", def.MaxContinentalElevation, "Highest elevation of continental crust, in `km`. Greater than 0.")
 		maxSpeed    = fs.Float64("max-plate-speed", def.MaxPlateSpeed, "Greatest speed of any point of a plate, in `km/My` (equal to mm/y). At least 0; 0 gives plates that do not move.")
 		dampening   = fs.Float64("oceanic-dampening", def.OceanicDampening, "Rate at which oceanic crust at sea level sinks as it ages, in `km/My` (equal to mm/y). At least 0; 0 gives oceanic crust that does not sink.")
+		subDistance = fs.Float64("subduction-distance", def.SubductionDistance, "How far behind a subduction front the overriding plate is uplifted, in `km`. At least 0; 0 gives no uplift.")
+		subUplift   = fs.Float64("subduction-uplift", def.SubductionUplift, "Base uplift of an overriding plate by subduction, in `km/My` (equal to mm/y). At least 0; 0 gives no uplift.")
+		erosion     = fs.Float64("continental-erosion", def.ContinentalErosion, "Rate at which continental crust at -max-continental-elevation is eroded, in `km/My` (equal to mm/y). At least 0; 0 gives no erosion.")
+		accretion   = fs.Float64("sediment-accretion", def.SedimentAccretion, "Rate at which sediment fills an oceanic trench that is no longer being formed, in `km/My` (equal to mm/y). At least 0; 0 gives trenches that stay.")
 		outPath     = fs.String("out", "", "Write the datafile to this `file`, replacing it if it exists.")
 		writeConfig = fs.String("write-config", "", "Write the effective Config as JSON to this `file`, or to standard output if the value is \"-\".")
 		verbose     = fs.Bool("v", false, "Print the sample count, file size, and timings to standard error.")
@@ -218,7 +222,7 @@ and no -out, the Config is checked and written and no world is generated.
 
 The effective Config is the default Config, then the members of the
 -config file, then each of the flags from -seed to
--oceanic-dampening that is given. The defaults shown above are
+-sediment-accretion that is given. The defaults shown above are
 the default Config: an Earth-like world of 942059 samples. An invalid
 Config is reported with the name of each invalid field, and nothing is
 written.
@@ -226,8 +230,8 @@ written.
 The Config file is one JSON object. This is the default Config:
 %s
 The same Config gives the same datafile, byte for byte, on the same CPU
-architecture. The default world takes about 6 seconds to generate on
-ten processors, and its datafile is about 126 MB. -duration 0 gives the
+architecture. The default world takes about 25 seconds to generate on
+ten processors, and its datafile is about 134 MB. -duration 0 gives the
 initial world, before any plate has moved.
 
 Example:
@@ -297,6 +301,18 @@ Example:
 			}
 			if wasSet(fs, "oceanic-dampening") {
 				cfg.OceanicDampening = *dampening
+			}
+			if wasSet(fs, "subduction-distance") {
+				cfg.SubductionDistance = *subDistance
+			}
+			if wasSet(fs, "subduction-uplift") {
+				cfg.SubductionUplift = *subUplift
+			}
+			if wasSet(fs, "continental-erosion") {
+				cfg.ContinentalErosion = *erosion
+			}
+			if wasSet(fs, "sediment-accretion") {
+				cfg.SedimentAccretion = *accretion
 			}
 			if err := cfg.Validate(); err != nil {
 				return err
@@ -380,6 +396,15 @@ lines from red (215, 48, 39) at 0 My through yellow (254, 224, 139) at
 187.5 My to violet (48, 24, 96) at 250 My and above. Crust is youngest
 on the ridges where it formed.
 
+-kind orogeny colours by the "orogeny_type" and "orogeny_age"
+attributes. Where the type is 0 (none), oceanic crust is pale blue
+(200, 215, 230) and continental crust pale grey (225, 225, 225). Type 1
+(Andean: raised by subduction) runs in a straight line from dark red
+(165, 15, 21) at 0 My to pale red (252, 187, 161) at 250 My and above.
+Type 2 (Himalayan: raised by continental collision) runs from dark
+violet (63, 0, 125) at 0 My to pale violet (188, 189, 220) at 250 My
+and above. The most recent mountain building is the darkest.
+
 A datafile without the attribute a kind needs is an error.
 
 The same datafile and width give the same PNG, byte for byte.
@@ -444,6 +469,7 @@ var kinds = map[string]func(*yaee.World, int) (*image.NRGBA, error){
 	"age":       render.OceanicAge,
 	"crust":     render.CrustType,
 	"elevation": render.Elevation,
+	"orogeny":   render.Orogeny,
 	"plates":    render.Plates,
 }
 

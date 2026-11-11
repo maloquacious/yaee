@@ -41,7 +41,7 @@ const MaxSteps = 1_000_000
 // are named by the json tags below, and decodes from that object without
 // loss:
 //
-//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.04}
+//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.04,"subduction_distance_km":1800,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.03,"sediment_accretion_km_per_my":0.3}
 //
 // Lengths are in kilometres (km) and times in millions of years (My).
 type Config struct {
@@ -188,6 +188,56 @@ type Config struct {
 	// puts the crust at TrenchElevation exactly. 0 gives oceanic crust
 	// that does not sink.
 	OceanicDampening float64 `json:"oceanic_dampening_km_per_my"`
+
+	// SubductionDistance is how far behind a subduction front the
+	// overriding plate is raised (the subduction distance r_s of the
+	// paper's Table 3).
+	// Unit: km. Range: finite and at least 0. Default: 1800.
+	//
+	// Uplift is 0 at the front, greatest at SubductionDistance / 6
+	// behind it, and 0 again at SubductionDistance and beyond. 0 gives
+	// no uplift.
+	SubductionDistance float64 `json:"subduction_distance_km"`
+
+	// SubductionUplift is the base rate at which subduction raises the
+	// overriding plate (the subduction uplift u_0 of the paper's Table
+	// 3).
+	// Unit: km/My, which equals mm/y. Range: finite and at least 0.
+	// Default: 0.6.
+	//
+	// The rate at a sample is SubductionUplift multiplied by three
+	// factors: one of the distance from the front, 0 to 1; the relative
+	// speed of the two plates divided by MaxPlateSpeed, 0 to 2; and the
+	// square of (z − TrenchElevation) / (MaxContinentalElevation −
+	// TrenchElevation), 0 to 1, with z the elevation of the crust that
+	// is subducting. It is then multiplied by 1 − e /
+	// MaxContinentalElevation, with e the sample's own elevation where
+	// that is above 0, so that no sample is raised above
+	// MaxContinentalElevation. 0 gives no uplift.
+	SubductionUplift float64 `json:"subduction_uplift_km_per_my"`
+
+	// ContinentalErosion is the rate at which land at
+	// MaxContinentalElevation is worn down (the continental erosion ε_c
+	// of the paper's Table 3).
+	// Unit: km/My, which equals mm/y. Range: finite and at least 0.
+	// Default: 0.03.
+	//
+	// In each time step of length δt My, the elevation z of every sample
+	// of continental crust above sea level becomes
+	//
+	//	z − (z / MaxContinentalElevation) · ContinentalErosion · δt
+	//
+	// and not less than 0. 0 gives land that is not eroded.
+	ContinentalErosion float64 `json:"continental_erosion_km_per_my"`
+
+	// SedimentAccretion is the rate at which an oceanic trench that is
+	// no longer being formed fills with sediment (the sediment
+	// accretion ε_t of the paper's Table 3).
+	// Unit: km/My, which equals mm/y. Range: finite and at least 0.
+	// Default: 0.3.
+	//
+	// 0 gives trenches that never fill.
+	SedimentAccretion float64 `json:"sediment_accretion_km_per_my"`
 }
 
 // DefaultConfig returns the configuration of an Earth-like world at
@@ -195,8 +245,10 @@ type Config struct {
 // Duration 250 My, TimeStep 2 My, Plates 40, PlateWarpAmplitude 1500 km,
 // PlateWarpFeatureSize 2500 km, LandCoverage 0.3, RidgeElevation −1 km,
 // AbyssalElevation −6 km, TrenchElevation −10 km,
-// MaxContinentalElevation 10 km, MaxPlateSpeed 100 km/My, and
-// OceanicDampening 0.04 km/My. It passes Validate.
+// MaxContinentalElevation 10 km, MaxPlateSpeed 100 km/My,
+// OceanicDampening 0.04 km/My, SubductionDistance 1800 km,
+// SubductionUplift 0.6 km/My, ContinentalErosion 0.03 km/My, and
+// SedimentAccretion 0.3 km/My. It passes Validate.
 func DefaultConfig() Config {
 	return Config{
 		Seed:                 0,
@@ -217,6 +269,11 @@ func DefaultConfig() Config {
 		MaxPlateSpeed: 100,
 
 		OceanicDampening: 0.04,
+
+		SubductionDistance: 1800,
+		SubductionUplift:   0.6,
+		ContinentalErosion: 0.03,
+		SedimentAccretion:  0.3,
 	}
 }
 
@@ -295,6 +352,19 @@ func (c Config) Validate() error {
 	}
 	if !(c.OceanicDampening >= 0) || math.IsInf(c.OceanicDampening, 0) {
 		invalid("OceanicDampening", "must be finite and at least 0, got %v", c.OceanicDampening)
+	}
+	for _, f := range []struct {
+		name  string
+		value float64
+	}{
+		{"SubductionDistance", c.SubductionDistance},
+		{"SubductionUplift", c.SubductionUplift},
+		{"ContinentalErosion", c.ContinentalErosion},
+		{"SedimentAccretion", c.SedimentAccretion},
+	} {
+		if !(f.value >= 0) || math.IsInf(f.value, 0) {
+			invalid(f.name, "must be finite and at least 0, got %v", f.value)
+		}
 	}
 	return errors.Join(errs...)
 }

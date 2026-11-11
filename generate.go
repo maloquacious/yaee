@@ -23,8 +23,8 @@ import (
 // whatever the number of processors. Worlds generated on different
 // architectures may differ.
 //
-// At the default scale Generate takes about 6 seconds on ten processors
-// and uses about 570 MB of memory. It may run goroutines, all of which
+// At the default scale Generate takes about 25 seconds on ten processors
+// and uses about 630 MB of memory. It may run goroutines, all of which
 // have ended when it returns.
 func Generate(ctx context.Context, cfg Config) (*World, error) {
 	if err := cfg.Validate(); err != nil {
@@ -58,6 +58,11 @@ func Generate(ctx context.Context, cfg Config) (*World, error) {
 		MaxPlateSpeed: cfg.MaxPlateSpeed,
 
 		OceanicDampening: cfg.OceanicDampening,
+
+		SubductionDistance: cfg.SubductionDistance,
+		SubductionUplift:   cfg.SubductionUplift,
+		ContinentalErosion: cfg.ContinentalErosion,
+		SedimentAccretion:  cfg.SedimentAccretion,
 	})
 	if err := model.Run(ctx, mw, cfg.Seed, stages()); err != nil {
 		return nil, err
@@ -94,6 +99,7 @@ func export(cfg Config, mw *model.World) *World {
 		{Name: AttrOrogenyAge, Unit: "My", Type: Float64, Components: 1, Float64s: mw.OrogenyAge},
 		{Name: AttrOrogenyType, Unit: "", Type: Uint8, Components: 1, Uint8s: mw.OrogenyType},
 		{Name: AttrFoldDirection, Unit: "", Type: Float64, Components: 3, Float64s: flatten(mw.FoldDirection)},
+		{Name: AttrUplift, Unit: "km/My", Type: Float64, Components: 1, Float64s: mw.Uplift},
 	}
 	return w
 }

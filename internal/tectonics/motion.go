@@ -134,7 +134,9 @@ func Velocity(w *model.World, k int, p sphere.Vec) sphere.Vec {
 // located in the mesh. tri is the triangle found. Its corner nearest to
 // the turned-back point, meaning the one with the greatest barycentric
 // weight (the lowest-numbered sample among equals), is the point's
-// owner, and ok reports whether the owner is a sample of plate k.
+// owner, and ok reports whether the owner is a sample of plate k that
+// has not been subducted (World.Subducted). A plate holds nothing where
+// its crust has gone beneath another plate.
 //
 // A triangle whose corners are in different plates therefore belongs to
 // no single plate: it is divided between them, each plate holding the
@@ -161,13 +163,8 @@ func query(w *model.World, k int32, back sphere.Vec) (tri int32, weights [3]floa
 	mesh := w.Mesh
 	tri, weights = w.Locator.Locate(back)
 	corners := mesh.Tri[3*tri : 3*tri+3]
-	owner := 0
-	for c := 1; c < 3; c++ {
-		if weights[c] > weights[owner] || weights[c] == weights[owner] && corners[c] < corners[owner] {
-			owner = c
-		}
-	}
-	if w.Plate[corners[owner]] != k {
+	owner := nearestCorner(corners, weights)
+	if w.Plate[corners[owner]] != k || w.Subducted[corners[owner]] {
 		return tri, [3]float64{}, false
 	}
 	// Rounding leaves a point at a corner with weights a hair away from
@@ -189,4 +186,27 @@ func query(w *model.World, k int32, back sphere.Vec) (tri int32, weights [3]floa
 		weights[c] /= sum
 	}
 	return tri, weights, true
+}
+
+// nearestCorner returns which of a triangle's three corners has the
+// greatest weight: 0, 1, or 2. Among equal weights it is the corner with
+// the lowest sample number.
+func nearestCorner(corners []int32, weights [3]float64) int {
+	c := 0
+	for j := 1; j < 3; j++ {
+		if weights[j] > weights[c] || weights[j] == weights[c] && corners[j] < corners[c] {
+			c = j
+		}
+	}
+	return c
+}
+
+// ownerAt returns the sample that owns the point back of the mesh: the
+// nearest corner of the triangle that contains it. The point belongs to
+// that sample's plate as the plates lay at the last resampling, whether
+// or not the sample has been subducted since.
+func ownerAt(w *model.World, back sphere.Vec) int32 {
+	tri, weights := w.Locator.Locate(back)
+	corners := w.Mesh.Tri[3*tri : 3*tri+3]
+	return corners[nearestCorner(corners, weights)]
 }
