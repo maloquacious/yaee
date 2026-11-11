@@ -41,7 +41,7 @@ const MaxSteps = 1_000_000
 // are named by the json tags below, and decodes from that object without
 // loss:
 //
-//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.04,"subduction_distance_km":1800,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.03,"sediment_accretion_km_per_my":0.3}
+//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.04,"subduction_distance_km":1800,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.03,"sediment_accretion_km_per_my":0.3,"collision_penetration_km":300,"collision_distance_km":4200,"collision_coefficient_per_km":0.000013}
 //
 // Lengths are in kilometres (km) and times in millions of years (My).
 type Config struct {
@@ -239,6 +239,42 @@ type Config struct {
 	//
 	// 0 gives trenches that never fill.
 	SedimentAccretion float64 `json:"sediment_accretion_km_per_my"`
+
+	// CollisionPenetration is how far the continental crust of one plate
+	// goes beneath the continental crust of another before the two
+	// collide (the interpenetration threshold of the paper's §6).
+	// Unit: km. Range: finite and at least 0. Default: 300.
+	//
+	// Until then the crust that goes beneath is consumed. At the
+	// collision the smaller of the two continents in contact leaves its
+	// plate and joins the other. 0 gives a collision in the first step in
+	// which the continents converge.
+	CollisionPenetration float64 `json:"collision_penetration_km"`
+
+	// CollisionDistance is the greatest distance from a collision at
+	// which land is raised (the collision distance r_c of the paper's
+	// Table 3).
+	// Unit: km. Range: finite and at least 0. Default: 4200.
+	//
+	// The distance for one collision is CollisionDistance ·
+	// √((v / MaxPlateSpeed) · (a / a₀)), and at most CollisionDistance,
+	// with v the speed in km/My at which the two plates meet, a the area
+	// in km² of the continent that changes plates, and a₀ the area of
+	// the sphere divided by Plates. 0 gives collisions that raise
+	// nothing.
+	CollisionDistance float64 `json:"collision_distance_km"`
+
+	// CollisionCoefficient is the rise at the suture of a collision per
+	// km² of the continent that changes plates (the collision
+	// coefficient Δ_c of the paper's Table 3).
+	// Unit: 1/km (km of rise per km² of area). Range: finite and at
+	// least 0. Default: 1.3e-5.
+	//
+	// The rise at the suture is s = CollisionCoefficient · a, limited to
+	// MaxContinentalElevation · (1 − exp(−s / MaxContinentalElevation)).
+	// It falls to 0 at the distance that CollisionDistance gives. 0 gives
+	// collisions that raise nothing.
+	CollisionCoefficient float64 `json:"collision_coefficient_per_km"`
 }
 
 // DefaultConfig returns the configuration of an Earth-like world at
@@ -248,8 +284,10 @@ type Config struct {
 // AbyssalElevation −6 km, TrenchElevation −10 km,
 // MaxContinentalElevation 10 km, MaxPlateSpeed 100 km/My,
 // OceanicDampening 0.04 km/My, SubductionDistance 1800 km,
-// SubductionUplift 0.6 km/My, ContinentalErosion 0.03 km/My, and
-// SedimentAccretion 0.3 km/My. It passes Validate.
+// SubductionUplift 0.6 km/My, ContinentalErosion 0.03 km/My,
+// SedimentAccretion 0.3 km/My, CollisionPenetration 300 km,
+// CollisionDistance 4200 km, and CollisionCoefficient 1.3e-5 per km. It
+// passes Validate.
 func DefaultConfig() Config {
 	return Config{
 		Seed:                 0,
@@ -275,6 +313,10 @@ func DefaultConfig() Config {
 		SubductionUplift:   0.6,
 		ContinentalErosion: 0.03,
 		SedimentAccretion:  0.3,
+
+		CollisionPenetration: 300,
+		CollisionDistance:    4200,
+		CollisionCoefficient: 1.3e-5,
 	}
 }
 
@@ -362,6 +404,9 @@ func (c Config) Validate() error {
 		{"SubductionUplift", c.SubductionUplift},
 		{"ContinentalErosion", c.ContinentalErosion},
 		{"SedimentAccretion", c.SedimentAccretion},
+		{"CollisionPenetration", c.CollisionPenetration},
+		{"CollisionDistance", c.CollisionDistance},
+		{"CollisionCoefficient", c.CollisionCoefficient},
 	} {
 		if !(f.value >= 0) || math.IsInf(f.value, 0) {
 			invalid(f.name, "must be finite and at least 0, got %v", f.value)

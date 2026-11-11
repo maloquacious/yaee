@@ -12,7 +12,8 @@ The sphere, the public API, the datafile format, and the command work at full sc
 A generated world has plates and crust, continents and oceans, and its plates drift for the configured time.
 Where plates part, new ocean floor forms at the ridge between them, and ocean floor sinks as it ages.
 Where plates meet, one subducts beneath the other: a trench forms along the front, the overriding plate is raised into mountains, and land erodes.
-Continents do not collide yet, and plates do not split.
+Where two continents meet they collide: the smaller joins the other's plate, and the land around the suture is raised.
+Plates do not split yet.
 [PLAN.md](PLAN.md) lists what is built and what comes next.
 Until the first tagged release, the API and the datafile format may change without notice.
 

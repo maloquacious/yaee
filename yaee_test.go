@@ -45,6 +45,7 @@ func TestDefaultConfig(t *testing.T) {
 		LandCoverage: 0.3, RidgeElevation: -1, AbyssalElevation: -6, TrenchElevation: -10, MaxContinentalElevation: 10,
 		MaxPlateSpeed: 100, OceanicDampening: 0.04,
 		SubductionDistance: 1800, SubductionUplift: 0.6, ContinentalErosion: 0.03, SedimentAccretion: 0.3,
+		CollisionPenetration: 300, CollisionDistance: 4200, CollisionCoefficient: 1.3e-5,
 	}
 	if cfg != want {
 		t.Fatalf("DefaultConfig() = %+v, want %+v", cfg, want)
@@ -58,8 +59,9 @@ func TestZeroConfigInvalid(t *testing.T) {
 	}
 	// Zero is legitimate for Seed, Duration, PlateWarpAmplitude,
 	// LandCoverage, MaxPlateSpeed, OceanicDampening, SubductionDistance,
-	// SubductionUplift, ContinentalErosion, and SedimentAccretion, and for
-	// nothing else. A zero TrenchElevation is invalid only because it is not
+	// SubductionUplift, ContinentalErosion, SedimentAccretion,
+	// CollisionPenetration, CollisionDistance, and CollisionCoefficient, and
+	// for nothing else. A zero TrenchElevation is invalid only because it is not
 	// below the AbyssalElevation.
 	for _, field := range []string{"Radius", "SampleSpacing", "TimeStep", "Plates", "PlateWarpFeatureSize",
 		"RidgeElevation", "AbyssalElevation", "TrenchElevation", "MaxContinentalElevation"} {
@@ -68,7 +70,8 @@ func TestZeroConfigInvalid(t *testing.T) {
 		}
 	}
 	for _, field := range []string{"Seed", "Duration", "PlateWarpAmplitude", "LandCoverage", "MaxPlateSpeed", "OceanicDampening",
-		"SubductionDistance", "SubductionUplift", "ContinentalErosion", "SedimentAccretion"} {
+		"SubductionDistance", "SubductionUplift", "ContinentalErosion", "SedimentAccretion",
+		"CollisionPenetration", "CollisionDistance", "CollisionCoefficient"} {
 		if strings.Contains(err.Error(), ": "+field+": ") {
 			t.Errorf("error names %s, whose zero is valid: %v", field, err)
 		}
@@ -138,6 +141,12 @@ func TestValidateNamesField(t *testing.T) {
 		{"SedimentAccretion", func(c *yaee.Config) { c.SedimentAccretion = -0.1 }},
 		{"SedimentAccretion", func(c *yaee.Config) { c.SedimentAccretion = nan }},
 		{"SedimentAccretion", func(c *yaee.Config) { c.SedimentAccretion = inf }},
+		{"CollisionPenetration", func(c *yaee.Config) { c.CollisionPenetration = -1 }},
+		{"CollisionPenetration", func(c *yaee.Config) { c.CollisionPenetration = nan }},
+		{"CollisionDistance", func(c *yaee.Config) { c.CollisionDistance = -1 }},
+		{"CollisionDistance", func(c *yaee.Config) { c.CollisionDistance = inf }},
+		{"CollisionCoefficient", func(c *yaee.Config) { c.CollisionCoefficient = -1e-9 }},
+		{"CollisionCoefficient", func(c *yaee.Config) { c.CollisionCoefficient = nan }},
 		{"Duration", func(c *yaee.Config) { c.Duration = 2*yaee.MaxSteps + 1 }},
 		{"Duration", func(c *yaee.Config) { c.Duration = 1; c.TimeStep = 1e-7 }},
 		{"SampleSpacing", func(c *yaee.Config) { c.SampleSpacing = 1e-300 }},
@@ -187,6 +196,9 @@ func TestValidateAcceptsBoundaries(t *testing.T) {
 		func(c *yaee.Config) { c.ContinentalErosion = 0 },
 		func(c *yaee.Config) { c.ContinentalErosion = 1000 },
 		func(c *yaee.Config) { c.SedimentAccretion = 0 },
+		func(c *yaee.Config) { c.CollisionPenetration = 0 },
+		func(c *yaee.Config) { c.CollisionDistance = 0 },
+		func(c *yaee.Config) { c.CollisionCoefficient = 0 },
 		func(c *yaee.Config) { c.Duration = 2 * yaee.MaxSteps },
 		func(c *yaee.Config) {
 			c.RidgeElevation, c.AbyssalElevation, c.TrenchElevation, c.MaxContinentalElevation = -1e-9, -2e-9, -3e-9, 1e-9
@@ -207,6 +219,7 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 		LandCoverage: 1.0 / 7, RidgeElevation: -0.1, AbyssalElevation: -math.E, TrenchElevation: -1e17, MaxContinentalElevation: 8.848,
 		MaxPlateSpeed: 77.7, OceanicDampening: 0.1 / 3,
 		SubductionDistance: 1234.5, SubductionUplift: 2.0 / 3, ContinentalErosion: 1e-5, SedimentAccretion: 0.7,
+		CollisionPenetration: 123.25, CollisionDistance: 3999.5, CollisionCoefficient: 2.5e-6,
 	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
@@ -229,7 +242,8 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 		`"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,` +
 		`"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,` +
 		`"oceanic_dampening_km_per_my":0.04,"subduction_distance_km":1800,"subduction_uplift_km_per_my":0.6,` +
-		`"continental_erosion_km_per_my":0.03,"sediment_accretion_km_per_my":0.3}`
+		`"continental_erosion_km_per_my":0.03,"sediment_accretion_km_per_my":0.3,` +
+		`"collision_penetration_km":300,"collision_distance_km":4200,"collision_coefficient_per_km":0.000013}`
 	if string(data) != want {
 		t.Fatalf("DefaultConfig as JSON:\n got %s\nwant %s", data, want)
 	}

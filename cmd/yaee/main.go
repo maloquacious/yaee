@@ -210,6 +210,9 @@ func generateCommand() *command {
 		subUplift   = fs.Float64("subduction-uplift", def.SubductionUplift, "Base uplift of an overriding plate by subduction, in `km/My` (equal to mm/y). At least 0; 0 gives no uplift.")
 		erosion     = fs.Float64("continental-erosion", def.ContinentalErosion, "Rate at which continental crust at -max-continental-elevation is eroded, in `km/My` (equal to mm/y). At least 0; 0 gives no erosion.")
 		accretion   = fs.Float64("sediment-accretion", def.SedimentAccretion, "Rate at which sediment fills an oceanic trench that is no longer being formed, in `km/My` (equal to mm/y). At least 0; 0 gives trenches that stay.")
+		penetration = fs.Float64("collision-penetration", def.CollisionPenetration, "How far one continent goes beneath another before they collide, in `km`. At least 0.")
+		colDistance = fs.Float64("collision-distance", def.CollisionDistance, "Greatest distance from a continental collision at which land is raised, in `km`. At least 0; 0 gives collisions that raise nothing.")
+		colCoeff    = fs.Float64("collision-coefficient", def.CollisionCoefficient, "Rise at the suture of a continental collision per km² of the continent that changes plates, in `1/km`. At least 0; 0 gives collisions that raise nothing.")
 		outPath     = fs.String("out", "", "Write the datafile to this `file`, replacing it if it exists.")
 		writeConfig = fs.String("write-config", "", "Write the effective Config as JSON to this `file`, or to standard output if the value is \"-\".")
 		verbose     = fs.Bool("v", false, "Print the sample count, file size, and timings to standard error.")
@@ -222,7 +225,7 @@ and no -out, the Config is checked and written and no world is generated.
 
 The effective Config is the default Config, then the members of the
 -config file, then each of the flags from -seed to
--sediment-accretion that is given. The defaults shown above are
+-collision-coefficient that is given. The defaults shown above are
 the default Config: an Earth-like world of 942059 samples. An invalid
 Config is reported with the name of each invalid field, and nothing is
 written.
@@ -230,7 +233,7 @@ written.
 The Config file is one JSON object. This is the default Config:
 %s
 The same Config gives the same datafile, byte for byte, on the same CPU
-architecture. The default world takes about 25 seconds to generate on
+architecture. The default world takes about 30 seconds to generate on
 ten processors, and its datafile is about 134 MB. -duration 0 gives the
 initial world, before any plate has moved.
 
@@ -313,6 +316,15 @@ Example:
 			}
 			if wasSet(fs, "sediment-accretion") {
 				cfg.SedimentAccretion = *accretion
+			}
+			if wasSet(fs, "collision-penetration") {
+				cfg.CollisionPenetration = *penetration
+			}
+			if wasSet(fs, "collision-distance") {
+				cfg.CollisionDistance = *colDistance
+			}
+			if wasSet(fs, "collision-coefficient") {
+				cfg.CollisionCoefficient = *colCoeff
 			}
 			if err := cfg.Validate(); err != nil {
 				return err

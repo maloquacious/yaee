@@ -109,7 +109,8 @@ func TestGenerateThenRender(t *testing.T) {
 	// The crust flags reach the Config.
 	mustRun(t, "generate", "-spacing", "800", "-land-coverage", "0.6", "-ridge-elevation", "-0.5", "-abyssal-elevation", "-4",
 		"-trench-elevation", "-8", "-max-continental-elevation", "9", "-max-plate-speed", "60", "-oceanic-dampening", "0.02",
-		"-subduction-distance", "900", "-subduction-uplift", "0.3", "-continental-erosion", "0.01", "-sediment-accretion", "0.5", "-out", world2)
+		"-subduction-distance", "900", "-subduction-uplift", "0.3", "-continental-erosion", "0.01", "-sediment-accretion", "0.5",
+		"-collision-penetration", "150", "-collision-distance", "2000", "-collision-coefficient", "5e-6", "-out", world2)
 	w2, err = yaee.Read(bytes.NewReader(readFile(t, world2)))
 	if err != nil {
 		t.Fatal(err)
@@ -119,6 +120,7 @@ func TestGenerateThenRender(t *testing.T) {
 	want.RidgeElevation, want.AbyssalElevation, want.TrenchElevation, want.MaxContinentalElevation = -0.5, -4, -8, 9
 	want.MaxPlateSpeed, want.OceanicDampening = 60, 0.02
 	want.SubductionDistance, want.SubductionUplift, want.ContinentalErosion, want.SedimentAccretion = 900, 0.3, 0.01, 0.5
+	want.CollisionPenetration, want.CollisionDistance, want.CollisionCoefficient = 150, 2000, 5e-6
 	if w2.Config != want {
 		t.Fatalf("the datafile records Config %+v, want %+v", w2.Config, want)
 	}

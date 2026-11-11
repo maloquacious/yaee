@@ -359,6 +359,43 @@ Done when:
 - The radius of influence grows with terrane area and relative speed as the power law states.
 - After a transfer, every sample still belongs to exactly one plate, and the total area of continental crust is unchanged.
 
+**Built** in version 0.17.0-alpha; the reviewer has not yet accepted the images. The code is `internal/tectonics/collision.go` (`Terranes`, `Subduction.Converge`, `Subduction.Collide`) and the resampling rule of `simulate`.
+
+What was built, where the paper and the plan left a choice:
+
+- Terranes are computed when a collision needs them, from the neighbour lists; nothing is kept between calls. They are numbered by their lowest sample.
+- "Sufficient continental mass" is read as: continental crust on both plates where they meet, whatever the sizes. A terrane narrower than the threshold is consumed before it can collide, which is the paper's forced subduction.
+- The interpenetration distance is kept per pair of plates and across resamplings: the sum over steps of the greatest closing speed at a front where continental crust goes beneath continental crust. The paper measures the overlap of the plates' triangles; ours is removed at every resampling, so there is none to measure. The distance returns to 0 when the pair has had no such front while the fastest sample moved 500 km.
+- Until the collision, the continental crust of the higher-numbered plate is consumed, as in milestone 6. Each collision therefore loses a strip up to `CollisionPenetration` wide.
+- A collision forces a resampling in its step, because a sample can change plates only while both plates' samples are where the mesh has them. A default run has about 20 more resamplings.
+- Which side moves: the terranes in contact (within 4 sample spacings of the collision front) with the smaller total area leave their plate; at equal areas, those of the plate that was beneath. Samples of the same plate that the moved terranes enclose go with them. What is left of the plate keeps its movement.
+- r = r_c √((v/v_0)(𝒜/𝒜_0)), both ratios under the root, and at most r_c. 𝒜_0 is 4πR²/`Plates`.
+- The surge is limited by scaling its whole profile, so that it is at most z_c at the suture and still falls smoothly to 0 at r: Δ_c 𝒜 is replaced with z_c (1 − exp(−Δ_c 𝒜/z_c)). It is then multiplied by 1 − max(z, 0)/z_c, as uplift is. Cutting each sample off at z_c gave plateaus at z_c with a cliff at r.
+- Both sides of the suture are raised: the terrane by the same profile, measured from the suture. The paper raises the collided plate only, which left a cliff of up to z_c along every suture. Oceanic crust is not raised.
+- Distances are straight across the sphere, not through the plate.
+- Fold direction is the paper's formula, which is the direction from the terrane's centroid to the sample, in the tangent plane. Issue #28 says "perpendicular to the direction from the centroid"; the formula it quotes says along it, and the formula was followed.
+- `CollisionPenetration` (300 km), `CollisionDistance` (r_c, 4200 km), and `CollisionCoefficient` (Δ_c, 1.3 × 10⁻⁵ per km) are `Config` fields with the paper's values.
+- The `uplift` attribute does not include a collision's surge, which is not a rate.
+
+Measured at full scale (942,059 samples, 250 My, 125 steps) on the development machine:
+
+| Measure | Value |
+|---------|-------|
+| `yaee generate` | 31 s, 850 MB peak resident memory |
+| Datafile | 133,773,368 bytes |
+| Runs with `GOMAXPROCS=1` and with the default | Identical datafile bytes |
+| Collisions, seed 1 | 30, in 21 steps, moving 35 terranes |
+| Continental share of the samples, seeds 1 to 3 | 0.280, 0.280, 0.283 (0.169 for seed 1 before this milestone) |
+| Continental elevation, seed 1 | median 4.8 km, 90th percentile 6.5 km, maximum 9.9 km |
+
+Seen in the images:
+
+- The straight coasts left by continental consumption are gone, and continents merge.
+- For milestone 9: the land is higher still. Δ_c 𝒜 is above z_c for any terrane over 770,000 km², so nearly every collision raises the suture to z_c, across up to 4200 km, and repeated collisions leave whole continents near z_c (seed 2).
+- The orogeny image shows the edge of each region of influence as an arc: orogeny type and age change for every sample within r, however little it was raised.
+- Thin lines of lower land inside high continents, and small plates of ocean floor enclosed by a continent, where slivers of a third plate lie along a suture. Not traced.
+- With no rifting, plates only merge: 40 plates at the start, fewer with samples at the end. Milestone 8.
+
 ### 8. Rifting
 
 Tracked by [#8](https://github.com/maloquacious/yaee/issues/8).

@@ -36,9 +36,10 @@
 // their crust. Where plates part, new oceanic crust forms at the ridge
 // between them, and all oceanic crust ages and sinks. Where plates
 // meet, one subducts beneath the other: a trench forms along the front,
-// the overriding plate is raised, and land erodes. Continents do not
-// collide yet: where two meet, the crust of one is consumed. Plates do
-// not split yet.
+// the overriding plate is raised, and land erodes. Where two continents
+// meet they collide: the smaller leaves its plate and joins the other,
+// and the land on both sides of the suture is raised. Plates do not
+// split yet.
 //
 // The tectonic model is that of
 //

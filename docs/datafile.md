@@ -89,7 +89,7 @@ The payload is one JSON object, encoded as UTF-8, with no byte order mark and no
 
 | Member | JSON type | Meaning |
 |--------|-----------|---------|
-| `library_version` | string | The version of the `yaee` library that generated the world, as a semantic version such as `0.16.0-alpha` |
+| `library_version` | string | The version of the `yaee` library that generated the world, as a semantic version such as `0.17.0-alpha` |
 | `config` | object | The configuration that generated the world |
 
 Members of `config`:
@@ -115,6 +115,9 @@ Members of `config`:
 | `subduction_uplift_km_per_my` | number | km/My | at least 0 | Base rate at which subduction raises the overriding plate. 0 gives no uplift |
 | `continental_erosion_km_per_my` | number | km/My | at least 0 | Rate at which continental crust at `max_continental_elevation_km` is eroded. 0 gives no erosion |
 | `sediment_accretion_km_per_my` | number | km/My | at least 0 | Rate at which sediment fills an oceanic trench that is no longer being formed. 0 gives trenches that stay |
+| `collision_penetration_km` | number | km | at least 0 | How far the continental crust of one plate goes beneath that of another before the two collide. See "After the start" under "Attributes written" |
+| `collision_distance_km` | number | km | at least 0 | Greatest distance from a continental collision at which land is raised. 0 gives collisions that raise nothing |
+| `collision_coefficient_per_km` | number | 1/km | at least 0 | Rise in km at the suture of a continental collision per km² of the continent that changes plates. 0 gives collisions that raise nothing |
 
 `seed` can exceed 2^53.
 A JSON parser that reads every number as an IEEE 754 double corrupts such a seed; use a parser that keeps 64-bit integers if the seed matters to you.
@@ -214,7 +217,7 @@ A later version of the library may add attributes, and may add element type code
 
 #### Attributes written
 
-Library version 0.16.0-alpha writes these attributes, in this order:
+Library version 0.17.0-alpha writes these attributes, in this order:
 
 | Name | Element type | Components | Unit | Range | Meaning |
 |------|--------------|------------|------|-------|---------|
@@ -273,14 +276,14 @@ With the default configuration the initial `elevation` is therefore −6 to −1
 ##### After the start
 
 The simulation runs for `duration_my` in steps of `time_step_my`; if `duration_my` is not a multiple of `time_step_my`, the last step is the shorter remainder.
-In this library version the plates move as rigid bodies, carrying their crust; oceanic crust ages and sinks; new oceanic crust forms where plates part; where plates meet, one subducts beneath the other, which is raised; trenches form along subduction fronts; and land erodes.
-Continents do not yet collide, and plates do not yet split.
+In this library version the plates move as rigid bodies, carrying their crust; oceanic crust ages and sinks; new oceanic crust forms where plates part; where plates meet, one subducts beneath the other, which is raised; trenches form along subduction fronts; continents that meet collide and join; and land erodes.
+Plates do not yet split.
 
 Where crust of two plates overlaps, one plate's crust subducts and is discarded; the other plate is the overriding plate there:
 
 - Oceanic crust subducts beneath continental crust.
 - Of two oceanic crusts, that of the plate whose oceanic crust is older on average subducts; at equal ages, that of the higher-numbered plate.
-- Of two continental crusts, that of the higher-numbered plate subducts. Continental crust is therefore lost during a run: with the default configuration the continental share of the samples falls from 0.30 to about 0.17.
+- Of two continental crusts, that of the higher-numbered plate subducts, until the two collide (below).
 
 A subduction front is the edge of an overriding plate along which another plate moves beneath it.
 
@@ -313,6 +316,25 @@ Every step, for every sample of continental crust whose `elevation` z is above 0
 Land that is not raised is, t My later, at z × exp(−`continental_erosion_km_per_my` × t / `max_continental_elevation_km`), within 0.005 km with the default configuration; it never falls below 0.
 Continental crust at or below 0 and oceanic crust are not eroded.
 
+For each pair of plates, the distance D in km by which their continental crusts have gone into each other is tracked.
+It starts at 0.
+Every step in which continental crust of one plate moves beneath continental crust of the other, D grows by c × δt, with c the greatest speed in km/My at which the one moves into the edge of the other.
+When D is at least `collision_penetration_km`, the plates collide, in that step:
+
+- The continents in contact are the connected regions of continental crust, one or more on each plate, that touch where the plates meet.
+  Those of the plate on which their total area is smaller leave that plate and join the other; if the areas are equal, those of the higher-numbered plate do.
+  `plate` changes for their samples, and for samples of the same plate that they enclose. No crust is created or removed.
+- For each such region, with area a in km², centre q (the mean position of its samples), and v the speed in km/My at which the two plates move past each other at q:
+  - r = `collision_distance_km` × min(1, √((v / `max_plate_speed_km_per_my`) × (a / a₀))), with a₀ = 4π × `radius_km`² / `plates`.
+  - s = `collision_coefficient_per_km` × a, and s′ = `max_continental_elevation_km` × (1 − exp(−s / `max_continental_elevation_km`)).
+  - Every sample of continental crust less than r km from the suture, on either side of it, is raised: its `elevation` z becomes z + s′ × (1 − (d / r)²)² × (1 − max(z, 0) / `max_continental_elevation_km`). For a sample of the plate that the region joined, d is its distance in km from the region; for a sample of the region, d is its distance from the continental crust of that plate.
+  - For each sample raised, `orogeny_type` becomes 2, `orogeny_age` becomes 0, and `fold_direction` becomes the unit vector from q toward the sample, made perpendicular to the sample's position (its length is then cos(θ / 2), with θ the angle between q and the sample).
+- D returns to 0.
+
+D also returns to 0 when the two continents stop converging.
+A region of continental crust narrower than `collision_penetration_km` is consumed before it can collide.
+`uplift` does not include the rise that a collision gives.
+
 Every step, the rotation axis of each subducting plate turns toward its subduction fronts (slab pull).
 The speed of the plate's fastest point does not change, so no point of a plate moves faster than `max_plate_speed_km_per_my`.
 
@@ -336,21 +358,21 @@ In the world that results:
 ## Size
 
 For N samples the file is 12 + (16 + J) + (20 + 24 × N) + (20 + 12 × (2 × N − 4)) + 16 bytes, where J is the length of the `META` JSON, plus 16 + 4 + A + U + S × C × N for each attribute.
-The default world has N = 942,059 and, with the attributes that library version 0.16.0-alpha writes, is 133,773,268 bytes.
+The default world has N = 942,059 and, with the attributes that library version 0.17.0-alpha writes, is 133,773,268 bytes.
 
 ## Example
 
-The file `testdata/example.yaee` in the repository is 1743 bytes.
-It is the world generated by library version 0.16.0-alpha from this configuration, which gives N = 6 samples and T = 8 triangles, and, because `duration_my` is 0, the initial world:
+The file `testdata/example.yaee` in the repository is 1843 bytes.
+It is the world generated by library version 0.17.0-alpha from this configuration, which gives N = 6 samples and T = 8 triangles, and, because `duration_my` is 0, the initial world:
 
 ```json
-{"seed":42,"radius_km":6370,"sample_spacing_km":10000,"duration_my":0,"time_step_my":2,"plates":2,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.04,"subduction_distance_km":1800,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.03,"sediment_accretion_km_per_my":0.3}
+{"seed":42,"radius_km":6370,"sample_spacing_km":10000,"duration_my":0,"time_step_my":2,"plates":2,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.04,"subduction_distance_km":1800,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.03,"sediment_accretion_km_per_my":0.3,"collision_penetration_km":300,"collision_distance_km":4200,"collision_coefficient_per_km":0.000013}
 ```
 
-Its `META` payload is these 540 bytes of text:
+Its `META` payload is these 640 bytes of text:
 
 ```json
-{"library_version":"0.16.0-alpha","config":{"seed":42,"radius_km":6370,"sample_spacing_km":10000,"duration_my":0,"time_step_my":2,"plates":2,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.04,"subduction_distance_km":1800,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.03,"sediment_accretion_km_per_my":0.3}}
+{"library_version":"0.17.0-alpha","config":{"seed":42,"radius_km":6370,"sample_spacing_km":10000,"duration_my":0,"time_step_my":2,"plates":2,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.04,"subduction_distance_km":1800,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.03,"sediment_accretion_km_per_my":0.3,"collision_penetration_km":300,"collision_distance_km":4200,"collision_coefficient_per_km":0.000013}}
 ```
 
 Every byte of the file is listed below.
@@ -363,9 +385,9 @@ A field longer than 16 bytes continues on the following lines.
 0008  01 00 00 00                                      format version = 1
 
 000c  4d 45 54 41                                      section kind "META"
-0010  1c 02 00 00 00 00 00 00                          payload length = 540
+0010  80 02 00 00 00 00 00 00                          payload length = 640
 0018  7b 22 6c 69 62 72 61 72 79 5f 76 65 72 73 69 6f  payload: the JSON text shown above
-0028  6e 22 3a 22 30 2e 31 36 2e 30 2d 61 6c 70 68 61
+0028  6e 22 3a 22 30 2e 31 37 2e 30 2d 61 6c 70 68 61
 0038  22 2c 22 63 6f 6e 66 69 67 22 3a 7b 22 73 65 65
 0048  64 22 3a 34 32 2c 22 72 61 64 69 75 73 5f 6b 6d
 0058  22 3a 36 33 37 30 2c 22 73 61 6d 70 6c 65 5f 73
@@ -397,232 +419,238 @@ A field longer than 16 bytes continues on the following lines.
 01f8  65 72 6f 73 69 6f 6e 5f 6b 6d 5f 70 65 72 5f 6d
 0208  79 22 3a 30 2e 30 33 2c 22 73 65 64 69 6d 65 6e
 0218  74 5f 61 63 63 72 65 74 69 6f 6e 5f 6b 6d 5f 70
-0228  65 72 5f 6d 79 22 3a 30 2e 33 7d 7d
-0234  1d 2e 50 84                                      CRC-32 of the 552 bytes from offset 000c = 84502e1d
+0228  65 72 5f 6d 79 22 3a 30 2e 33 2c 22 63 6f 6c 6c
+0238  69 73 69 6f 6e 5f 70 65 6e 65 74 72 61 74 69 6f
+0248  6e 5f 6b 6d 22 3a 33 30 30 2c 22 63 6f 6c 6c 69
+0258  73 69 6f 6e 5f 64 69 73 74 61 6e 63 65 5f 6b 6d
+0268  22 3a 34 32 30 30 2c 22 63 6f 6c 6c 69 73 69 6f
+0278  6e 5f 63 6f 65 66 66 69 63 69 65 6e 74 5f 70 65
+0288  72 5f 6b 6d 22 3a 30 2e 30 30 30 30 31 33 7d 7d
+0298  db d3 d8 b7                                      CRC-32 of the 652 bytes from offset 000c = b7d8d3db
 
-0238  53 4d 50 4c                                      section kind "SMPL"
-023c  94 00 00 00 00 00 00 00                          payload length = 148
-0244  06 00 00 00                                      N = 6 samples
-0248  cd f4 a8 62 4c b0 e1 3f                          sample 0 x = 0.5527707983925666
-0250  00 00 00 00 00 00 00 00                          sample 0 y = 0
-0258  ab aa aa aa aa aa ea 3f                          sample 0 z = 0.8333333333333334
-0260  8d d1 d2 b3 3f 6f e4 bf                          sample 1 x = -0.6385801803758554
-0268  17 00 ef a0 40 b8 e2 bf                          sample 1 y = -0.5849917548403053
-0270  00 00 00 00 00 00 e0 3f                          sample 1 z = 0.5
-0278  2a 45 a8 20 65 11 b6 3f                          sample 2 x = 0.08620292708680624
-0280  29 36 2e 29 7e 6e ef 3f                          sample 2 y = 0.9822378925616181
-0288  54 55 55 55 55 55 c5 3f                          sample 2 z = 0.16666666666666663
-0290  be 62 fd e5 9d 32 e3 3f                          sample 3 x = 0.5999288074482008
-0298  da ae 4b 50 3f 0a e9 bf                          sample 3 y = -0.7825008934282451
-02a0  58 55 55 55 55 55 c5 bf                          sample 3 z = -0.16666666666666674
-02a8  a3 33 61 bd 07 4a eb bf                          sample 4 x = -0.8527868937322761
-02b0  7c 4c 49 e9 eb 4e c3 3f                          sample 4 y = 0.15084599390920406
-02b8  00 00 00 00 00 00 e0 bf                          sample 4 z = -0.5
-02c0  66 a1 22 2d 8d d9 dd 3f                          sample 5 x = 0.46640328796140407
-02c8  21 af 85 f6 ed fc d2 3f                          sample 5 y = 0.29668759416994034
-02d0  aa aa aa aa aa aa ea bf                          sample 5 z = -0.8333333333333333
-02d8  c0 a8 d3 44                                      CRC-32 of the 160 bytes from offset 0238 = 44d3a8c0
+029c  53 4d 50 4c                                      section kind "SMPL"
+02a0  94 00 00 00 00 00 00 00                          payload length = 148
+02a8  06 00 00 00                                      N = 6 samples
+02ac  cd f4 a8 62 4c b0 e1 3f                          sample 0 x = 0.5527707983925666
+02b4  00 00 00 00 00 00 00 00                          sample 0 y = 0
+02bc  ab aa aa aa aa aa ea 3f                          sample 0 z = 0.8333333333333334
+02c4  8d d1 d2 b3 3f 6f e4 bf                          sample 1 x = -0.6385801803758554
+02cc  17 00 ef a0 40 b8 e2 bf                          sample 1 y = -0.5849917548403053
+02d4  00 00 00 00 00 00 e0 3f                          sample 1 z = 0.5
+02dc  2a 45 a8 20 65 11 b6 3f                          sample 2 x = 0.08620292708680624
+02e4  29 36 2e 29 7e 6e ef 3f                          sample 2 y = 0.9822378925616181
+02ec  54 55 55 55 55 55 c5 3f                          sample 2 z = 0.16666666666666663
+02f4  be 62 fd e5 9d 32 e3 3f                          sample 3 x = 0.5999288074482008
+02fc  da ae 4b 50 3f 0a e9 bf                          sample 3 y = -0.7825008934282451
+0304  58 55 55 55 55 55 c5 bf                          sample 3 z = -0.16666666666666674
+030c  a3 33 61 bd 07 4a eb bf                          sample 4 x = -0.8527868937322761
+0314  7c 4c 49 e9 eb 4e c3 3f                          sample 4 y = 0.15084599390920406
+031c  00 00 00 00 00 00 e0 bf                          sample 4 z = -0.5
+0324  66 a1 22 2d 8d d9 dd 3f                          sample 5 x = 0.46640328796140407
+032c  21 af 85 f6 ed fc d2 3f                          sample 5 y = 0.29668759416994034
+0334  aa aa aa aa aa aa ea bf                          sample 5 z = -0.8333333333333333
+033c  c0 a8 d3 44                                      CRC-32 of the 160 bytes from offset 029c = 44d3a8c0
 
-02dc  54 52 49 53                                      section kind "TRIS"
-02e0  64 00 00 00 00 00 00 00                          payload length = 100
-02e8  08 00 00 00                                      T = 8 triangles
-02ec  00 00 00 00 05 00 00 00 02 00 00 00              triangle 0 = samples 0, 5, 2
-02f8  00 00 00 00 03 00 00 00 05 00 00 00              triangle 1 = samples 0, 3, 5
-0304  05 00 00 00 03 00 00 00 04 00 00 00              triangle 2 = samples 5, 3, 4
-0310  02 00 00 00 04 00 00 00 01 00 00 00              triangle 3 = samples 2, 4, 1
-031c  04 00 00 00 03 00 00 00 01 00 00 00              triangle 4 = samples 4, 3, 1
-0328  03 00 00 00 00 00 00 00 01 00 00 00              triangle 5 = samples 3, 0, 1
-0334  05 00 00 00 04 00 00 00 02 00 00 00              triangle 6 = samples 5, 4, 2
-0340  01 00 00 00 00 00 00 00 02 00 00 00              triangle 7 = samples 1, 0, 2
-034c  3f 76 78 72                                      CRC-32 of the 112 bytes from offset 02dc = 7278763f
+0340  54 52 49 53                                      section kind "TRIS"
+0344  64 00 00 00 00 00 00 00                          payload length = 100
+034c  08 00 00 00                                      T = 8 triangles
+0350  00 00 00 00 05 00 00 00 02 00 00 00              triangle 0 = samples 0, 5, 2
+035c  00 00 00 00 03 00 00 00 05 00 00 00              triangle 1 = samples 0, 3, 5
+0368  05 00 00 00 03 00 00 00 04 00 00 00              triangle 2 = samples 5, 3, 4
+0374  02 00 00 00 04 00 00 00 01 00 00 00              triangle 3 = samples 2, 4, 1
+0380  04 00 00 00 03 00 00 00 01 00 00 00              triangle 4 = samples 4, 3, 1
+038c  03 00 00 00 00 00 00 00 01 00 00 00              triangle 5 = samples 3, 0, 1
+0398  05 00 00 00 04 00 00 00 02 00 00 00              triangle 6 = samples 5, 4, 2
+03a4  01 00 00 00 00 00 00 00 02 00 00 00              triangle 7 = samples 1, 0, 2
+03b0  3f 76 78 72                                      CRC-32 of the 112 bytes from offset 0340 = 7278763f
 
-0350  41 54 54 52                                      section kind "ATTR"
-0354  21 00 00 00 00 00 00 00                          payload length = 33
-035c  05                                               name length = 5
-035d  70 6c 61 74 65                                   name "plate"
-0362  00                                               unit length = 0
-0363                                                   unit ""
-0363  02                                               element type = 2 (int32)
-0364  01                                               components = 1
-0365  01 00 00 00                                      plate of sample 0 = 1
-0369  01 00 00 00                                      plate of sample 1 = 1
-036d  00 00 00 00                                      plate of sample 2 = 0
-0371  01 00 00 00                                      plate of sample 3 = 1
-0375  00 00 00 00                                      plate of sample 4 = 0
-0379  00 00 00 00                                      plate of sample 5 = 0
-037d  cb 98 75 80                                      CRC-32 of the 45 bytes from offset 0350 = 807598cb
+03b4  41 54 54 52                                      section kind "ATTR"
+03b8  21 00 00 00 00 00 00 00                          payload length = 33
+03c0  05                                               name length = 5
+03c1  70 6c 61 74 65                                   name "plate"
+03c6  00                                               unit length = 0
+03c7                                                   unit ""
+03c7  02                                               element type = 2 (int32)
+03c8  01                                               components = 1
+03c9  01 00 00 00                                      plate of sample 0 = 1
+03cd  01 00 00 00                                      plate of sample 1 = 1
+03d1  00 00 00 00                                      plate of sample 2 = 0
+03d5  01 00 00 00                                      plate of sample 3 = 1
+03d9  00 00 00 00                                      plate of sample 4 = 0
+03dd  00 00 00 00                                      plate of sample 5 = 0
+03e1  cb 98 75 80                                      CRC-32 of the 45 bytes from offset 03b4 = 807598cb
 
-0381  41 54 54 52                                      section kind "ATTR"
-0385  14 00 00 00 00 00 00 00                          payload length = 20
-038d  0a                                               name length = 10
-038e  63 72 75 73 74 5f 74 79 70 65                    name "crust_type"
-0398  00                                               unit length = 0
-0399                                                   unit ""
-0399  01                                               element type = 1 (uint8)
-039a  01                                               components = 1
-039b  00                                               crust_type of sample 0 = 0
-039c  00                                               crust_type of sample 1 = 0
-039d  01                                               crust_type of sample 2 = 1
-039e  00                                               crust_type of sample 3 = 0
-039f  00                                               crust_type of sample 4 = 0
-03a0  01                                               crust_type of sample 5 = 1
-03a1  d9 55 40 92                                      CRC-32 of the 32 bytes from offset 0381 = 924055d9
+03e5  41 54 54 52                                      section kind "ATTR"
+03e9  14 00 00 00 00 00 00 00                          payload length = 20
+03f1  0a                                               name length = 10
+03f2  63 72 75 73 74 5f 74 79 70 65                    name "crust_type"
+03fc  00                                               unit length = 0
+03fd                                                   unit ""
+03fd  01                                               element type = 1 (uint8)
+03fe  01                                               components = 1
+03ff  00                                               crust_type of sample 0 = 0
+0400  00                                               crust_type of sample 1 = 0
+0401  01                                               crust_type of sample 2 = 1
+0402  00                                               crust_type of sample 3 = 0
+0403  00                                               crust_type of sample 4 = 0
+0404  01                                               crust_type of sample 5 = 1
+0405  d9 55 40 92                                      CRC-32 of the 32 bytes from offset 03e5 = 924055d9
 
-03a5  41 54 54 52                                      section kind "ATTR"
-03a9  3f 00 00 00 00 00 00 00                          payload length = 63
-03b1  09                                               name length = 9
-03b2  74 68 69 63 6b 6e 65 73 73                       name "thickness"
-03bb  02                                               unit length = 2
-03bc  6b 6d                                            unit "km"
-03be  04                                               element type = 4 (float64)
-03bf  01                                               components = 1
-03c0  00 00 00 00 00 00 1c 40                          thickness of sample 0 = 7
-03c8  00 00 00 00 00 00 1c 40                          thickness of sample 1 = 7
-03d0  00 00 00 00 00 80 41 40                          thickness of sample 2 = 35
-03d8  00 00 00 00 00 00 1c 40                          thickness of sample 3 = 7
-03e0  00 00 00 00 00 00 1c 40                          thickness of sample 4 = 7
-03e8  00 00 00 00 00 80 41 40                          thickness of sample 5 = 35
-03f0  2c c8 e1 5a                                      CRC-32 of the 75 bytes from offset 03a5 = 5ae1c82c
+0409  41 54 54 52                                      section kind "ATTR"
+040d  3f 00 00 00 00 00 00 00                          payload length = 63
+0415  09                                               name length = 9
+0416  74 68 69 63 6b 6e 65 73 73                       name "thickness"
+041f  02                                               unit length = 2
+0420  6b 6d                                            unit "km"
+0422  04                                               element type = 4 (float64)
+0423  01                                               components = 1
+0424  00 00 00 00 00 00 1c 40                          thickness of sample 0 = 7
+042c  00 00 00 00 00 00 1c 40                          thickness of sample 1 = 7
+0434  00 00 00 00 00 80 41 40                          thickness of sample 2 = 35
+043c  00 00 00 00 00 00 1c 40                          thickness of sample 3 = 7
+0444  00 00 00 00 00 00 1c 40                          thickness of sample 4 = 7
+044c  00 00 00 00 00 80 41 40                          thickness of sample 5 = 35
+0454  2c c8 e1 5a                                      CRC-32 of the 75 bytes from offset 0409 = 5ae1c82c
 
-03f4  41 54 54 52                                      section kind "ATTR"
-03f8  3f 00 00 00 00 00 00 00                          payload length = 63
-0400  09                                               name length = 9
-0401  65 6c 65 76 61 74 69 6f 6e                       name "elevation"
-040a  02                                               unit length = 2
-040b  6b 6d                                            unit "km"
-040d  04                                               element type = 4 (float64)
-040e  01                                               components = 1
-040f  00 00 00 00 00 00 f0 bf                          elevation of sample 0 = -1
-0417  00 00 00 00 00 00 f0 bf                          elevation of sample 1 = -1
-041f  9a 99 99 99 99 99 b9 3f                          elevation of sample 2 = 0.1
-0427  00 00 00 00 00 00 f0 bf                          elevation of sample 3 = -1
-042f  00 00 00 00 00 00 f0 bf                          elevation of sample 4 = -1
-0437  9a 99 99 99 99 99 b9 3f                          elevation of sample 5 = 0.1
-043f  bb 5d c4 cb                                      CRC-32 of the 75 bytes from offset 03f4 = cbc45dbb
+0458  41 54 54 52                                      section kind "ATTR"
+045c  3f 00 00 00 00 00 00 00                          payload length = 63
+0464  09                                               name length = 9
+0465  65 6c 65 76 61 74 69 6f 6e                       name "elevation"
+046e  02                                               unit length = 2
+046f  6b 6d                                            unit "km"
+0471  04                                               element type = 4 (float64)
+0472  01                                               components = 1
+0473  00 00 00 00 00 00 f0 bf                          elevation of sample 0 = -1
+047b  00 00 00 00 00 00 f0 bf                          elevation of sample 1 = -1
+0483  9a 99 99 99 99 99 b9 3f                          elevation of sample 2 = 0.1
+048b  00 00 00 00 00 00 f0 bf                          elevation of sample 3 = -1
+0493  00 00 00 00 00 00 f0 bf                          elevation of sample 4 = -1
+049b  9a 99 99 99 99 99 b9 3f                          elevation of sample 5 = 0.1
+04a3  bb 5d c4 cb                                      CRC-32 of the 75 bytes from offset 0458 = cbc45dbb
 
-0443  41 54 54 52                                      section kind "ATTR"
-0447  41 00 00 00 00 00 00 00                          payload length = 65
-044f  0b                                               name length = 11
-0450  6f 63 65 61 6e 69 63 5f 61 67 65                 name "oceanic_age"
-045b  02                                               unit length = 2
-045c  4d 79                                            unit "My"
-045e  04                                               element type = 4 (float64)
-045f  01                                               components = 1
-0460  ba 1a 33 15 71 57 69 40                          oceanic_age of sample 0 = 202.7325540540822
-0468  ba 1a 33 15 71 57 69 40                          oceanic_age of sample 1 = 202.7325540540822
-0470  00 00 00 00 00 00 00 00                          oceanic_age of sample 2 = 0
-0478  ba 1a 33 15 71 57 69 40                          oceanic_age of sample 3 = 202.7325540540822
-0480  ba 1a 33 15 71 57 69 40                          oceanic_age of sample 4 = 202.7325540540822
-0488  00 00 00 00 00 00 00 00                          oceanic_age of sample 5 = 0
-0490  cb b1 9d b9                                      CRC-32 of the 77 bytes from offset 0443 = b99db1cb
+04a7  41 54 54 52                                      section kind "ATTR"
+04ab  41 00 00 00 00 00 00 00                          payload length = 65
+04b3  0b                                               name length = 11
+04b4  6f 63 65 61 6e 69 63 5f 61 67 65                 name "oceanic_age"
+04bf  02                                               unit length = 2
+04c0  4d 79                                            unit "My"
+04c2  04                                               element type = 4 (float64)
+04c3  01                                               components = 1
+04c4  ba 1a 33 15 71 57 69 40                          oceanic_age of sample 0 = 202.7325540540822
+04cc  ba 1a 33 15 71 57 69 40                          oceanic_age of sample 1 = 202.7325540540822
+04d4  00 00 00 00 00 00 00 00                          oceanic_age of sample 2 = 0
+04dc  ba 1a 33 15 71 57 69 40                          oceanic_age of sample 3 = 202.7325540540822
+04e4  ba 1a 33 15 71 57 69 40                          oceanic_age of sample 4 = 202.7325540540822
+04ec  00 00 00 00 00 00 00 00                          oceanic_age of sample 5 = 0
+04f4  cb b1 9d b9                                      CRC-32 of the 77 bytes from offset 04a7 = b99db1cb
 
-0494  41 54 54 52                                      section kind "ATTR"
-0498  a3 00 00 00 00 00 00 00                          payload length = 163
-04a0  0f                                               name length = 15
-04a1  72 69 64 67 65 5f 64 69 72 65 63 74 69 6f 6e     name "ridge_direction"
-04b0  00                                               unit length = 0
-04b1                                                   unit ""
-04b1  04                                               element type = 4 (float64)
-04b2  03                                               components = 3
-04b3  00 00 00 00 00 00 00 00                          ridge_direction x of sample 0 = 0
-04bb  00 00 00 00 00 00 00 00                          ridge_direction y of sample 0 = 0
-04c3  00 00 00 00 00 00 00 00                          ridge_direction z of sample 0 = 0
-04cb  00 00 00 00 00 00 00 00                          ridge_direction x of sample 1 = 0
-04d3  00 00 00 00 00 00 00 00                          ridge_direction y of sample 1 = 0
-04db  00 00 00 00 00 00 00 00                          ridge_direction z of sample 1 = 0
-04e3  00 00 00 00 00 00 00 00                          ridge_direction x of sample 2 = 0
-04eb  00 00 00 00 00 00 00 00                          ridge_direction y of sample 2 = 0
-04f3  00 00 00 00 00 00 00 00                          ridge_direction z of sample 2 = 0
-04fb  00 00 00 00 00 00 00 00                          ridge_direction x of sample 3 = 0
-0503  00 00 00 00 00 00 00 00                          ridge_direction y of sample 3 = 0
-050b  00 00 00 00 00 00 00 00                          ridge_direction z of sample 3 = 0
-0513  00 00 00 00 00 00 00 00                          ridge_direction x of sample 4 = 0
-051b  00 00 00 00 00 00 00 00                          ridge_direction y of sample 4 = 0
-0523  00 00 00 00 00 00 00 00                          ridge_direction z of sample 4 = 0
-052b  00 00 00 00 00 00 00 00                          ridge_direction x of sample 5 = 0
-0533  00 00 00 00 00 00 00 00                          ridge_direction y of sample 5 = 0
-053b  00 00 00 00 00 00 00 00                          ridge_direction z of sample 5 = 0
-0543  92 07 59 35                                      CRC-32 of the 175 bytes from offset 0494 = 35590792
+04f8  41 54 54 52                                      section kind "ATTR"
+04fc  a3 00 00 00 00 00 00 00                          payload length = 163
+0504  0f                                               name length = 15
+0505  72 69 64 67 65 5f 64 69 72 65 63 74 69 6f 6e     name "ridge_direction"
+0514  00                                               unit length = 0
+0515                                                   unit ""
+0515  04                                               element type = 4 (float64)
+0516  03                                               components = 3
+0517  00 00 00 00 00 00 00 00                          ridge_direction x of sample 0 = 0
+051f  00 00 00 00 00 00 00 00                          ridge_direction y of sample 0 = 0
+0527  00 00 00 00 00 00 00 00                          ridge_direction z of sample 0 = 0
+052f  00 00 00 00 00 00 00 00                          ridge_direction x of sample 1 = 0
+0537  00 00 00 00 00 00 00 00                          ridge_direction y of sample 1 = 0
+053f  00 00 00 00 00 00 00 00                          ridge_direction z of sample 1 = 0
+0547  00 00 00 00 00 00 00 00                          ridge_direction x of sample 2 = 0
+054f  00 00 00 00 00 00 00 00                          ridge_direction y of sample 2 = 0
+0557  00 00 00 00 00 00 00 00                          ridge_direction z of sample 2 = 0
+055f  00 00 00 00 00 00 00 00                          ridge_direction x of sample 3 = 0
+0567  00 00 00 00 00 00 00 00                          ridge_direction y of sample 3 = 0
+056f  00 00 00 00 00 00 00 00                          ridge_direction z of sample 3 = 0
+0577  00 00 00 00 00 00 00 00                          ridge_direction x of sample 4 = 0
+057f  00 00 00 00 00 00 00 00                          ridge_direction y of sample 4 = 0
+0587  00 00 00 00 00 00 00 00                          ridge_direction z of sample 4 = 0
+058f  00 00 00 00 00 00 00 00                          ridge_direction x of sample 5 = 0
+0597  00 00 00 00 00 00 00 00                          ridge_direction y of sample 5 = 0
+059f  00 00 00 00 00 00 00 00                          ridge_direction z of sample 5 = 0
+05a7  92 07 59 35                                      CRC-32 of the 175 bytes from offset 04f8 = 35590792
 
-0547  41 54 54 52                                      section kind "ATTR"
-054b  41 00 00 00 00 00 00 00                          payload length = 65
-0553  0b                                               name length = 11
-0554  6f 72 6f 67 65 6e 79 5f 61 67 65                 name "orogeny_age"
-055f  02                                               unit length = 2
-0560  4d 79                                            unit "My"
-0562  04                                               element type = 4 (float64)
-0563  01                                               components = 1
-0564  00 00 00 00 00 00 00 00                          orogeny_age of sample 0 = 0
-056c  00 00 00 00 00 00 00 00                          orogeny_age of sample 1 = 0
-0574  00 00 00 00 00 00 00 00                          orogeny_age of sample 2 = 0
-057c  00 00 00 00 00 00 00 00                          orogeny_age of sample 3 = 0
-0584  00 00 00 00 00 00 00 00                          orogeny_age of sample 4 = 0
-058c  00 00 00 00 00 00 00 00                          orogeny_age of sample 5 = 0
-0594  ae bc 7a 7f                                      CRC-32 of the 77 bytes from offset 0547 = 7f7abcae
+05ab  41 54 54 52                                      section kind "ATTR"
+05af  41 00 00 00 00 00 00 00                          payload length = 65
+05b7  0b                                               name length = 11
+05b8  6f 72 6f 67 65 6e 79 5f 61 67 65                 name "orogeny_age"
+05c3  02                                               unit length = 2
+05c4  4d 79                                            unit "My"
+05c6  04                                               element type = 4 (float64)
+05c7  01                                               components = 1
+05c8  00 00 00 00 00 00 00 00                          orogeny_age of sample 0 = 0
+05d0  00 00 00 00 00 00 00 00                          orogeny_age of sample 1 = 0
+05d8  00 00 00 00 00 00 00 00                          orogeny_age of sample 2 = 0
+05e0  00 00 00 00 00 00 00 00                          orogeny_age of sample 3 = 0
+05e8  00 00 00 00 00 00 00 00                          orogeny_age of sample 4 = 0
+05f0  00 00 00 00 00 00 00 00                          orogeny_age of sample 5 = 0
+05f8  ae bc 7a 7f                                      CRC-32 of the 77 bytes from offset 05ab = 7f7abcae
 
-0598  41 54 54 52                                      section kind "ATTR"
-059c  16 00 00 00 00 00 00 00                          payload length = 22
-05a4  0c                                               name length = 12
-05a5  6f 72 6f 67 65 6e 79 5f 74 79 70 65              name "orogeny_type"
-05b1  00                                               unit length = 0
-05b2                                                   unit ""
-05b2  01                                               element type = 1 (uint8)
-05b3  01                                               components = 1
-05b4  00                                               orogeny_type of sample 0 = 0
-05b5  00                                               orogeny_type of sample 1 = 0
-05b6  00                                               orogeny_type of sample 2 = 0
-05b7  00                                               orogeny_type of sample 3 = 0
-05b8  00                                               orogeny_type of sample 4 = 0
-05b9  00                                               orogeny_type of sample 5 = 0
-05ba  68 3c d7 22                                      CRC-32 of the 34 bytes from offset 0598 = 22d73c68
+05fc  41 54 54 52                                      section kind "ATTR"
+0600  16 00 00 00 00 00 00 00                          payload length = 22
+0608  0c                                               name length = 12
+0609  6f 72 6f 67 65 6e 79 5f 74 79 70 65              name "orogeny_type"
+0615  00                                               unit length = 0
+0616                                                   unit ""
+0616  01                                               element type = 1 (uint8)
+0617  01                                               components = 1
+0618  00                                               orogeny_type of sample 0 = 0
+0619  00                                               orogeny_type of sample 1 = 0
+061a  00                                               orogeny_type of sample 2 = 0
+061b  00                                               orogeny_type of sample 3 = 0
+061c  00                                               orogeny_type of sample 4 = 0
+061d  00                                               orogeny_type of sample 5 = 0
+061e  68 3c d7 22                                      CRC-32 of the 34 bytes from offset 05fc = 22d73c68
 
-05be  41 54 54 52                                      section kind "ATTR"
-05c2  a2 00 00 00 00 00 00 00                          payload length = 162
-05ca  0e                                               name length = 14
-05cb  66 6f 6c 64 5f 64 69 72 65 63 74 69 6f 6e        name "fold_direction"
-05d9  00                                               unit length = 0
-05da                                                   unit ""
-05da  04                                               element type = 4 (float64)
-05db  03                                               components = 3
-05dc  00 00 00 00 00 00 00 00                          fold_direction x of sample 0 = 0
-05e4  00 00 00 00 00 00 00 00                          fold_direction y of sample 0 = 0
-05ec  00 00 00 00 00 00 00 00                          fold_direction z of sample 0 = 0
-05f4  00 00 00 00 00 00 00 00                          fold_direction x of sample 1 = 0
-05fc  00 00 00 00 00 00 00 00                          fold_direction y of sample 1 = 0
-0604  00 00 00 00 00 00 00 00                          fold_direction z of sample 1 = 0
-060c  00 00 00 00 00 00 00 00                          fold_direction x of sample 2 = 0
-0614  00 00 00 00 00 00 00 00                          fold_direction y of sample 2 = 0
-061c  00 00 00 00 00 00 00 00                          fold_direction z of sample 2 = 0
-0624  00 00 00 00 00 00 00 00                          fold_direction x of sample 3 = 0
-062c  00 00 00 00 00 00 00 00                          fold_direction y of sample 3 = 0
-0634  00 00 00 00 00 00 00 00                          fold_direction z of sample 3 = 0
-063c  00 00 00 00 00 00 00 00                          fold_direction x of sample 4 = 0
-0644  00 00 00 00 00 00 00 00                          fold_direction y of sample 4 = 0
-064c  00 00 00 00 00 00 00 00                          fold_direction z of sample 4 = 0
-0654  00 00 00 00 00 00 00 00                          fold_direction x of sample 5 = 0
-065c  00 00 00 00 00 00 00 00                          fold_direction y of sample 5 = 0
-0664  00 00 00 00 00 00 00 00                          fold_direction z of sample 5 = 0
-066c  78 68 10 90                                      CRC-32 of the 174 bytes from offset 05be = 90106878
+0622  41 54 54 52                                      section kind "ATTR"
+0626  a2 00 00 00 00 00 00 00                          payload length = 162
+062e  0e                                               name length = 14
+062f  66 6f 6c 64 5f 64 69 72 65 63 74 69 6f 6e        name "fold_direction"
+063d  00                                               unit length = 0
+063e                                                   unit ""
+063e  04                                               element type = 4 (float64)
+063f  03                                               components = 3
+0640  00 00 00 00 00 00 00 00                          fold_direction x of sample 0 = 0
+0648  00 00 00 00 00 00 00 00                          fold_direction y of sample 0 = 0
+0650  00 00 00 00 00 00 00 00                          fold_direction z of sample 0 = 0
+0658  00 00 00 00 00 00 00 00                          fold_direction x of sample 1 = 0
+0660  00 00 00 00 00 00 00 00                          fold_direction y of sample 1 = 0
+0668  00 00 00 00 00 00 00 00                          fold_direction z of sample 1 = 0
+0670  00 00 00 00 00 00 00 00                          fold_direction x of sample 2 = 0
+0678  00 00 00 00 00 00 00 00                          fold_direction y of sample 2 = 0
+0680  00 00 00 00 00 00 00 00                          fold_direction z of sample 2 = 0
+0688  00 00 00 00 00 00 00 00                          fold_direction x of sample 3 = 0
+0690  00 00 00 00 00 00 00 00                          fold_direction y of sample 3 = 0
+0698  00 00 00 00 00 00 00 00                          fold_direction z of sample 3 = 0
+06a0  00 00 00 00 00 00 00 00                          fold_direction x of sample 4 = 0
+06a8  00 00 00 00 00 00 00 00                          fold_direction y of sample 4 = 0
+06b0  00 00 00 00 00 00 00 00                          fold_direction z of sample 4 = 0
+06b8  00 00 00 00 00 00 00 00                          fold_direction x of sample 5 = 0
+06c0  00 00 00 00 00 00 00 00                          fold_direction y of sample 5 = 0
+06c8  00 00 00 00 00 00 00 00                          fold_direction z of sample 5 = 0
+06d0  78 68 10 90                                      CRC-32 of the 174 bytes from offset 0622 = 90106878
 
-0670  41 54 54 52                                      section kind "ATTR"
-0674  3f 00 00 00 00 00 00 00                          payload length = 63
-067c  06                                               name length = 6
-067d  75 70 6c 69 66 74                                name "uplift"
-0683  05                                               unit length = 5
-0684  6b 6d 2f 4d 79                                   unit "km/My"
-0689  04                                               element type = 4 (float64)
-068a  01                                               components = 1
-068b  00 00 00 00 00 00 00 00                          uplift of sample 0 = 0
-0693  00 00 00 00 00 00 00 00                          uplift of sample 1 = 0
-069b  00 00 00 00 00 00 00 00                          uplift of sample 2 = 0
-06a3  00 00 00 00 00 00 00 00                          uplift of sample 3 = 0
-06ab  00 00 00 00 00 00 00 00                          uplift of sample 4 = 0
-06b3  00 00 00 00 00 00 00 00                          uplift of sample 5 = 0
-06bb  b0 da e2 db                                      CRC-32 of the 75 bytes from offset 0670 = dbe2dab0
+06d4  41 54 54 52                                      section kind "ATTR"
+06d8  3f 00 00 00 00 00 00 00                          payload length = 63
+06e0  06                                               name length = 6
+06e1  75 70 6c 69 66 74                                name "uplift"
+06e7  05                                               unit length = 5
+06e8  6b 6d 2f 4d 79                                   unit "km/My"
+06ed  04                                               element type = 4 (float64)
+06ee  01                                               components = 1
+06ef  00 00 00 00 00 00 00 00                          uplift of sample 0 = 0
+06f7  00 00 00 00 00 00 00 00                          uplift of sample 1 = 0
+06ff  00 00 00 00 00 00 00 00                          uplift of sample 2 = 0
+0707  00 00 00 00 00 00 00 00                          uplift of sample 3 = 0
+070f  00 00 00 00 00 00 00 00                          uplift of sample 4 = 0
+0717  00 00 00 00 00 00 00 00                          uplift of sample 5 = 0
+071f  b0 da e2 db                                      CRC-32 of the 75 bytes from offset 06d4 = dbe2dab0
 
-06bf  45 4e 44 20                                      section kind "END "
-06c3  00 00 00 00 00 00 00 00                          payload length = 0
-06cb  1f 11 8b 42                                      CRC-32 of the 12 bytes from offset 06bf = 428b111f
+0723  45 4e 44 20                                      section kind "END "
+0727  00 00 00 00 00 00 00 00                          payload length = 0
+072f  1f 11 8b 42                                      CRC-32 of the 12 bytes from offset 0723 = 428b111f
 ```
 <!-- example:end -->
 
@@ -671,7 +699,7 @@ func main() {
 Output:
 
 ```text
-0.16.0-alpha 6 8
+0.17.0-alpha 6 8
 [0.5527707983925666 0 0.8333333333333334] [0 5 2]
 [1 1 0 1 0 0]
 [0 0 1 0 0 1]

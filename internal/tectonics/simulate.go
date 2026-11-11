@@ -40,20 +40,26 @@ const resampleDistance = 500.0
 //     gone beneath another plate (§4.1).
 //  2. AgeOcean ages and dampens the oceanic crust (§4.5).
 //  3. Subduction.Fronts finds the subduction fronts.
-//  4. Subduction.Uplift raises the overriding plates and updates fold
+//  4. Subduction.Converge tracks how far continents have gone into each
+//     other, and finds the pairs of plates that collide (§4.2).
+//  5. Subduction.Uplift raises the overriding plates and updates fold
 //     direction and orogeny (§4.1).
-//  5. Subduction.Trenches fills and forms the oceanic trenches (§4.5).
-//  6. Erode applies continental erosion (§4.5).
-//  7. Subduction.SlabPull turns the axes of the subducting plates
+//  6. Subduction.Trenches fills and forms the oceanic trenches (§4.5).
+//  7. Erode applies continental erosion (§4.5).
+//  8. Subduction.SlabPull turns the axes of the subducting plates
 //     (§4.1), which changes how they move from the next step on.
 //
-// The world is then resampled with Resample if the fastest sample of any
-// plate has moved resampleDistance km or more since the last
-// resampling, counting each step as that step's length times the speed
-// of the fastest sample at its start. After the last step the world is
-// resampled if any plate has moved at all, so the stage always leaves
-// the crust on the fixed samples, with every plate's rotation the
-// identity and no sample marked as subducted.
+// The world is then resampled with Resample if any of these holds:
+//
+//   - the fastest sample of any plate has moved resampleDistance km or
+//     more since the last resampling, counting each step as that step's
+//     length times the speed of the fastest sample at its start;
+//   - step 4 found a collision. Subduction.Collide then moves the
+//     terranes and raises the land (§4.2);
+//   - it was the last step, and any plate has moved at all.
+//
+// The stage therefore always leaves the crust on the fixed samples, with
+// every plate's rotation the identity and no sample marked as subducted.
 //
 // The stage draws no random numbers yet.
 type Simulation struct{}
@@ -86,7 +92,8 @@ func Steps(duration, timeStep float64) int {
 }
 
 // simulate runs the simulation, resampling each time the fastest sample
-// has moved distance km. It returns the number of resamplings.
+// has moved distance km, and in every step that has a collision. It
+// returns the number of resamplings.
 func simulate(ctx context.Context, w *model.World, distance float64) (resamplings int, err error) {
 	steps := Steps(w.Duration, w.TimeStep)
 	sub := NewSubduction(w)
@@ -105,10 +112,12 @@ func simulate(ctx context.Context, w *model.World, distance float64) (resampling
 		if err := sub.Step(ctx, w, dt); err != nil {
 			return resamplings, err
 		}
-		if moved >= distance || s == steps-1 && moved > 0 {
+		collisions := sub.Pending()
+		if moved >= distance || len(collisions) > 0 || s == steps-1 && moved > 0 {
 			if err := Resample(ctx, w, elapsed); err != nil {
 				return resamplings, err
 			}
+			sub.Collide(w, collisions)
 			sub.Reset(w)
 			resamplings++
 			moved, elapsed = 0, 0
@@ -117,7 +126,7 @@ func simulate(ctx context.Context, w *model.World, distance float64) (resampling
 	return resamplings, nil
 }
 
-// Step carries the world through one time step of dt My: the seven
+// Step carries the world through one time step of dt My: the eight
 // actions that Simulation lists, in that order.
 func (s *Subduction) Step(ctx context.Context, w *model.World, dt float64) error {
 	if err := s.Advance(ctx, w, dt); err != nil {
@@ -129,6 +138,7 @@ func (s *Subduction) Step(ctx context.Context, w *model.World, dt float64) error
 	if err := s.Fronts(ctx, w); err != nil {
 		return err
 	}
+	s.Converge(w, dt)
 	if err := s.Uplift(ctx, w, dt); err != nil {
 		return err
 	}

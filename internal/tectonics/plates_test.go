@@ -37,6 +37,10 @@ func earth() model.Params {
 		SubductionUplift:   0.6,
 		ContinentalErosion: 0.03,
 		SedimentAccretion:  0.3,
+
+		CollisionPenetration: 300,
+		CollisionDistance:    4200,
+		CollisionCoefficient: 1.3e-5,
 	}
 }
 

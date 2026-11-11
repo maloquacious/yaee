@@ -48,6 +48,10 @@ type Params struct {
 	SubductionUplift   float64 // km/My; u_0
 	ContinentalErosion float64 // km/My; ε_c
 	SedimentAccretion  float64 // km/My; ε_t
+
+	CollisionPenetration float64 // km; the interpenetration distance of §6
+	CollisionDistance    float64 // km; r_c
+	CollisionCoefficient float64 // per km; Δ_c
 }
 
 // Values of World.CrustType.

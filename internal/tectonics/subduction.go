@@ -59,9 +59,9 @@ const (
 //     of the lower-numbered plate overrides;
 //   - of two continental crusts, the crust of the lower-numbered plate
 //     overrides. This is the paper's "partial subduction" of a
-//     continental-continental configuration; until continental collision
-//     exists (issue #7) the other plate's continental crust is consumed
-//     like oceanic crust.
+//     continental-continental configuration: until it
+//     ends in a collision (Subduction.Converge) the other plate's
+//     continental crust is consumed like oceanic crust.
 //
 // typeA is the crust type at the place where the two meet, plateA the
 // number of the plate that holds the crust, and oceanA that plate's
@@ -161,8 +161,10 @@ func HeightTransfer(p model.Params, z float64) float64 {
 // subduction fronts are, and how far each sample of an overriding plate
 // is from its front.
 //
-// A step of the simulation calls, in order, Advance, Fronts, Uplift,
-// Trenches, and SlabPull. Reset must be called after every Resample.
+// A step of the simulation calls, in order, Advance, Fronts, Converge,
+// Uplift, Trenches, and SlabPull. Reset must be called after every
+// Resample. The state also tracks continental collision (§4.2), which it
+// keeps across resamplings.
 type Subduction struct {
 	spacing float64 // km between neighbouring samples, on average
 
@@ -188,6 +190,18 @@ type Subduction struct {
 	trenchAt []int32      // scratch of spread
 	scratch  [][]int32    // per plate
 	heaps    []spreadHeap // per plate
+
+	// Continental collision (§4.2); see Converge and Collide. These are
+	// kept across resamplings.
+	areas    []float64   // per sample: sphere.Mesh.PointAreas
+	approach []float64   // per sample: the closing speed in km/My of a collision front sample, or 0
+	closed   []float64   // per pair of plates, [over · plates + under]: the interpenetration distance in km
+	closing  []float64   // per pair: the closing speed in km/My last measured
+	apart    []float64   // per pair: km the fastest sample has moved since the pair last had a collision front
+	measured []float64   // scratch of Converge
+	pending  []Collision // found by the latest call of Converge
+	surge2   []float64   // scratch of Collide, as dist2
+	surgeAt  []int32     // scratch of Collide, as site
 }
 
 // nearPlate is, for each sample, one of the plates near it, and a
@@ -232,6 +246,8 @@ func NewSubduction(w *model.World) *Subduction {
 		trenchAt: make([]int32, n),
 		scratch:  make([][]int32, w.NumPlates),
 		heaps:    make([]spreadHeap, w.NumPlates),
+		areas:    w.Mesh.PointAreas(),
+		approach: make([]float64, n),
 	}
 	for i := range n {
 		s.dist2[i], s.site[i], s.under[i] = math.Inf(1), -1, -1
@@ -588,7 +604,7 @@ func (s *Subduction) Fronts(ctx context.Context, w *model.World) error {
 	err := model.ParallelRange(ctx, len(mesh.Points), func(lo, hi int) {
 		var ring []int32
 		for i := lo; i < hi; i++ {
-			s.under[i] = -1
+			s.under[i], s.approach[i] = -1, 0
 			if w.Subducted[i] {
 				continue
 			}
@@ -643,6 +659,9 @@ func (s *Subduction) Fronts(ctx context.Context, w *model.World) error {
 				}
 				s.under[i] = p
 				s.slab[i] = w.Elevation[o] + w.Trench[o]
+				if w.CrustType[i] == model.Continental && w.CrustType[o] == model.Continental {
+					s.approach[i] = -rel.Dot(out)
+				}
 				break
 			}
 		}
