@@ -18,6 +18,14 @@
 //
 // Equal Config values give equal worlds on the same CPU architecture.
 //
+// Write encodes a World as a datafile and Read decodes one. The datafile
+// format is specified in docs/datafile.md, completely enough to write a
+// reader in another language; FormatVersion is the version this library
+// reads and writes.
+//
+//	err := yaee.Write(file, world)
+//	world, err := yaee.Read(file)
+//
 // Lengths are in kilometres (km) and times in millions of years (My).
 //
 // The package does not print, read the environment or command-line

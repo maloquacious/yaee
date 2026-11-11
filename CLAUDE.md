@@ -134,6 +134,7 @@ The command is used by agents too: it never prompts, it reports errors on standa
 | `/` (package `yaee`) | The public API: `Config`, `Generate`, the world data, reading and writing the datafile |
 | `cmd/yaee` | The development command: generate a world, write the datafile, render check images |
 | `internal/` | Everything else. `internal/cerrs` gives constant sentinel errors; `internal/dotenv` loads `.env` files for the command |
+| `docs/datafile.md` | The datafile specification. `testdata/example.yaee` is the example it lists byte by byte; a test keeps the two and the writer in step |
 | `docs/research/` | Reference papers. `papers.md` has the citations and links; the PDFs are not committed |
 | `tmp/` | All scratch output: binaries, generated worlds, images. Git-ignored, and excluded from `./...` by the `ignore` directive in `go.mod` |
 
