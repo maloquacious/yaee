@@ -57,12 +57,12 @@ Tectonics is the first stage, not the whole generator.
 Erosion comes next, and eventually biomes.
 `docs/research/papers.md` also lists two erosion papers (Cordonnier et al. 2016; Tzathas et al. 2024) as references for that work.
 
-**Undecided: how much relief the generator produces.**
+**Relief: the generator stops at the coarse crust. §5 is on hold.**
 The tectonic simulation yields a coarse crust; the paper's §5 amplifies it into detailed relief.
-Whether we stop at the crust, amplify it, or let erosion supply the detail has not been settled.
-Do not implement §5, and do not rule it out, without asking.
+Decided 2026-11-11: do not implement §5. It adds detail finer than the samples and needs exemplar terrain data; a later erosion stage, or a client, supplies detail.
+On hold is not ruled out: do not implement §5 without being asked, and do not remove what it would need.
 
-Until that is settled, keep both paths open:
+So keep both paths open:
 
 - Build the generator as stages that each take the world data and add to it, so erosion and biomes can follow tectonics without reworking it.
 - Keep everything the simulation computes per sample (Table 1), not just elevation. Later stages and amplification both need crust type, ages, and fold and ridge directions.

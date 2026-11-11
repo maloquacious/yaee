@@ -47,11 +47,9 @@ Settled:
 | Delaunay triangulation | We write our own, under `internal/`. No third-party triangulation library. |
 | Who the documentation is for | Coding agents. They are the users of this library, command, and datafile. See "Documentation" under Design. |
 
-Open:
+| How much relief the generator produces | Decided 2026-11-11: the generator stops at the coarse crust. The paper's §5 amplification is on hold, not ruled out: it is not implemented unless the user asks, and the per-sample data it would need (Table 1) stays in the datafile. |
 
-| Decision | Needed by |
-|----------|-----------|
-| How much relief the generator produces (§5 amplification). Recorded as undecided in CLAUDE.md. Nothing in milestones 1 to 8 depends on the answer. | Before milestone 9 closes |
+Open: none.
 
 ## Where the paper is silent
 
@@ -453,9 +451,11 @@ Seen in the images:
 
 Tracked by [#9](https://github.com/maloquacious/yaee/issues/9), with sub-issues #29 to #31.
 
+**Done** in version 0.20.0-alpha. The reviewer accepted the full-scale images of seeds 1 to 5 on 2026-11-11; the thin seas through continents were the only distraction, and are [#32](https://github.com/maloquacious/yaee/issues/32). The code is `tectonics.AgeOcean`, `tectonics.ElevationNoise`, the defaults in `config.go`, and `internal/stats`.
+
 Low-frequency noise (§4.5). Tuning `DefaultConfig` so that a default run looks like an Earth-like world. Profiling and speeding up the full-scale run. A summary command that reports statistics for a datafile.
 
-The open decision on relief is settled before this milestone closes.
+The decision on relief was settled on 2026-11-11: see Decisions.
 
 9.3 ([#31](https://github.com/maloquacious/yaee/issues/31)) is **done** in version 0.19.0-alpha: `yaee stats -in file` prints measurements of a datafile as JSON, and `yaee help stats` gives every member with its unit. The code is `internal/stats`. Beyond the issue's list it reports land that is oceanic crust, elevation by crust type with quantiles, continents and landmasses (connected regions whatever their plates), and the share of each orogeny type; tuning needs them. Fractions are of the sphere's area, not of the sample count.
 
@@ -513,7 +513,7 @@ Done when:
 
 Not planned in detail. Each needs its own plan when its turn comes.
 
-- **Thin seas.** [#32](https://github.com/maloquacious/yaee/issues/32): investigate the lines of sea one or two samples wide that run through continents. After milestone 9.
+- **Thin seas.** [#32](https://github.com/maloquacious/yaee/issues/32): investigate the lines of sea one or two samples wide that run through continents. Milestone 9 is done, so this may start.
 - **Erosion.** A further stage after tectonics. References: Cordonnier et al. 2016, which combines tectonic uplift with fluvial erosion, and Tzathas et al. 2024, which gives an analytical erosion model. Both want an uplift rate per sample, which the tectonic stage computes; milestone 6 should keep it in the world data, not discard it after applying it.
-- **Relief.** Depends on the open decision above.
+- **Relief.** The paper's §5 amplification is on hold; see Decisions. Do not start it without being asked.
 - **Biomes.** A further stage after erosion. It will need climate inputs that nothing in this plan produces.
