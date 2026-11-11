@@ -51,8 +51,19 @@ type World struct {
 	Attributes []Attribute
 }
 
-// Names of the attributes that Generate produces.
+// Names of the attributes that Generate produces, in the order they
+// appear in World.Attributes.
 const (
+	// AttrPlate is the number of the tectonic plate the sample belongs
+	// to. Type Int32, 1 component, no unit. Range: 0 to
+	// Config.Plates−1; every number in that range is used by at least
+	// one sample.
+	//
+	// The samples of one plate form a single connected region: any two
+	// of them are joined by a path of neighbouring samples of the same
+	// plate.
+	AttrPlate = "plate"
+
 	// AttrElevation is the height of the surface above sea level.
 	// Type Float64, 1 component, unit "km". Negative below sea level.
 	//

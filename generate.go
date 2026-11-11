@@ -10,6 +10,7 @@ import (
 
 	"github.com/maloquacious/yaee/internal/model"
 	"github.com/maloquacious/yaee/internal/sphere"
+	"github.com/maloquacious/yaee/internal/tectonics"
 )
 
 // Generate builds the world that cfg describes.
@@ -41,10 +42,14 @@ func Generate(ctx context.Context, cfg Config) (*World, error) {
 		return nil, fmt.Errorf("yaee: triangulating %d samples: %w", cfg.sampleCount(), err)
 	}
 
-	mw := model.NewWorld(mesh)
-	mw.Radius = cfg.Radius
-	mw.Duration = cfg.Duration
-	mw.TimeStep = cfg.TimeStep
+	mw := model.NewWorld(mesh, model.Params{
+		Radius:               cfg.Radius,
+		Duration:             cfg.Duration,
+		TimeStep:             cfg.TimeStep,
+		Plates:               cfg.Plates,
+		PlateWarpAmplitude:   cfg.PlateWarpAmplitude,
+		PlateWarpFeatureSize: cfg.PlateWarpFeatureSize,
+	})
 	if err := model.Run(ctx, mw, cfg.Seed, stages()); err != nil {
 		return nil, err
 	}
@@ -53,7 +58,7 @@ func Generate(ctx context.Context, cfg Config) (*World, error) {
 
 // stages returns the stages of generation, in the order they run.
 func stages() []model.Stage {
-	return []model.Stage{placeholder{}}
+	return []model.Stage{tectonics.Plates{}, placeholder{}}
 }
 
 // export copies the working data into a World.
@@ -71,12 +76,13 @@ func export(cfg Config, mw *model.World) *World {
 		w.Triangles[t] = [3]int32(mw.Mesh.Tri[3*t : 3*t+3])
 	}
 	w.Attributes = []Attribute{
+		{Name: AttrPlate, Unit: "", Type: Int32, Components: 1, Int32s: mw.Plate},
 		{Name: AttrElevation, Unit: "km", Type: Float64, Components: 1, Float64s: mw.Elevation},
 	}
 	return w
 }
 
-// placeholder is the only stage until tectonics exists. It sets the
+// placeholder stands in for the crust until it exists. It sets the
 // elevation to a smooth function of position, so that images and
 // datafiles of the skeleton are not uniform. It is not part of the
 // paper's model, and it draws no random numbers.

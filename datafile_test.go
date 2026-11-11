@@ -81,8 +81,14 @@ func TestRoundTripGenerated(t *testing.T) {
 	if !bytes.Equal(encode(t, got), data) {
 		t.Fatal("writing the world read back gives different bytes")
 	}
-	if want := 12 + (16 + 4 + 24*2000) + (16 + 4 + 12*3996) + (16 + 1 + 9 + 1 + 2 + 2 + 8*2000) + 16; len(data)-want < 16 || len(data)-want > 16+200 {
-		t.Fatalf("file is %d bytes; want %d plus a META section", len(data), want)
+	// The size the specification gives, with J the length of the META
+	// JSON.
+	want := 12 + (16 + 4 + 24*2000) + (16 + 4 + 12*3996) + 16
+	for _, a := range w.Attributes {
+		want += 16 + 4 + len(a.Name) + len(a.Unit) + a.Type.Size()*a.Components*2000
+	}
+	if j := len(data) - want - 16; j < 100 || j > 1000 {
+		t.Fatalf("file is %d bytes; want %d plus a META section, which leaves %d bytes of JSON", len(data), want, j)
 	}
 }
 
@@ -396,8 +402,9 @@ func exampleWorld(t testing.TB) *yaee.World {
 	cfg := yaee.DefaultConfig()
 	cfg.Seed = 42
 	cfg.SampleSpacing = 10000
+	cfg.Plates = 2
 	w := mustGenerate(t, cfg)
-	w.Version = "0.7.0-alpha"
+	w.Version = "0.10.0-alpha"
 	return w
 }
 
@@ -533,13 +540,29 @@ func annotate(t testing.TB, data []byte) string {
 			field(l, "unit %q", data[off:off+l])
 			typ := yaee.ElementType(lazy(1, func(b []byte) string { return fmt.Sprintf("element type = %d (%s)", b[0], yaee.ElementType(b[0])) })[0])
 			comps := int(lazy(1, func(b []byte) string { return fmt.Sprintf("components = %d", b[0]) })[0])
-			if typ != yaee.Float64 || comps != 1 {
-				t.Fatalf("annotate: attribute %q is %s x%d; only float64 x1 is handled", name, typ, comps)
-			}
 			for i := range n {
-				lazy(8, func(b []byte) string {
-					return fmt.Sprintf("%s of sample %d = %s", name, i, float(math.Float64frombits(le.Uint64(b))))
-				})
+				for c := range comps {
+					what := fmt.Sprintf("%s of sample %d", name, i)
+					if comps == 3 {
+						what = fmt.Sprintf("%s %c of sample %d", name, "xyz"[c], i)
+					} else if comps != 1 {
+						what = fmt.Sprintf("%s component %d of sample %d", name, c, i)
+					}
+					lazy(typ.Size(), func(b []byte) string {
+						switch typ {
+						case yaee.Uint8:
+							return fmt.Sprintf("%s = %d", what, b[0])
+						case yaee.Int32:
+							return fmt.Sprintf("%s = %d", what, int32(le.Uint32(b)))
+						case yaee.Float32:
+							return fmt.Sprintf("%s = %s", what, strconv.FormatFloat(float64(math.Float32frombits(le.Uint32(b))), 'g', -1, 32))
+						case yaee.Float64:
+							return fmt.Sprintf("%s = %s", what, float(math.Float64frombits(le.Uint64(b))))
+						}
+						t.Fatalf("annotate: attribute %q has unknown element type %d", name, typ)
+						return ""
+					})
+				}
 			}
 		case "END ":
 		default:

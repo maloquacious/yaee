@@ -21,6 +21,7 @@ import (
 func smallConfig(n int) yaee.Config {
 	cfg := yaee.DefaultConfig()
 	cfg.SampleSpacing = math.Sqrt(8 * math.Pi * cfg.Radius * cfg.Radius / (math.Sqrt(3) * float64(n)))
+	cfg.Plates = min(cfg.Plates, n)
 	return cfg
 }
 
@@ -38,7 +39,10 @@ func TestDefaultConfig(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("DefaultConfig is invalid: %v", err)
 	}
-	want := yaee.Config{Seed: 0, Radius: 6370, SampleSpacing: 25, Duration: 250, TimeStep: 2}
+	want := yaee.Config{
+		Seed: 0, Radius: 6370, SampleSpacing: 25, Duration: 250, TimeStep: 2,
+		Plates: 40, PlateWarpAmplitude: 1500, PlateWarpFeatureSize: 2500,
+	}
 	if cfg != want {
 		t.Fatalf("DefaultConfig() = %+v, want %+v", cfg, want)
 	}
@@ -49,13 +53,14 @@ func TestZeroConfigInvalid(t *testing.T) {
 	if !errors.Is(err, yaee.ErrInvalidConfig) {
 		t.Fatalf("zero Config: got %v, want ErrInvalidConfig", err)
 	}
-	// Zero is legitimate for Seed and Duration, and for nothing else.
-	for _, field := range []string{"Radius", "SampleSpacing", "TimeStep"} {
+	// Zero is legitimate for Seed, Duration, and PlateWarpAmplitude, and
+	// for nothing else.
+	for _, field := range []string{"Radius", "SampleSpacing", "TimeStep", "Plates", "PlateWarpFeatureSize"} {
 		if !strings.Contains(err.Error(), ": "+field+": ") {
 			t.Errorf("error does not name %s: %v", field, err)
 		}
 	}
-	for _, field := range []string{"Seed", "Duration"} {
+	for _, field := range []string{"Seed", "Duration", "PlateWarpAmplitude"} {
 		if strings.Contains(err.Error(), field) {
 			t.Errorf("error names %s, whose zero is valid: %v", field, err)
 		}
@@ -78,6 +83,17 @@ func TestValidateNamesField(t *testing.T) {
 		{"SampleSpacing", func(c *yaee.Config) { c.SampleSpacing = inf }},
 		{"SampleSpacing", func(c *yaee.Config) { c.SampleSpacing = 20000 }}, // 1 sample
 		{"SampleSpacing", func(c *yaee.Config) { c.SampleSpacing = 1 }},     // 589 million samples
+		{"Plates", func(c *yaee.Config) { c.Plates = 0 }},
+		{"Plates", func(c *yaee.Config) { c.Plates = -3 }},
+		{"Plates", func(c *yaee.Config) { c.Plates = yaee.MaxPlates + 1 }},
+		{"Plates", func(c *yaee.Config) { c.SampleSpacing = 5000; c.Plates = 25 }}, // 24 samples
+		{"PlateWarpAmplitude", func(c *yaee.Config) { c.PlateWarpAmplitude = -1 }},
+		{"PlateWarpAmplitude", func(c *yaee.Config) { c.PlateWarpAmplitude = nan }},
+		{"PlateWarpAmplitude", func(c *yaee.Config) { c.PlateWarpAmplitude = inf }},
+		{"PlateWarpFeatureSize", func(c *yaee.Config) { c.PlateWarpFeatureSize = 0 }},
+		{"PlateWarpFeatureSize", func(c *yaee.Config) { c.PlateWarpFeatureSize = -2500 }},
+		{"PlateWarpFeatureSize", func(c *yaee.Config) { c.PlateWarpFeatureSize = nan }},
+		{"PlateWarpFeatureSize", func(c *yaee.Config) { c.PlateWarpFeatureSize = inf }},
 		{"SampleSpacing", func(c *yaee.Config) { c.SampleSpacing = 1e-300 }},
 		{"Duration", func(c *yaee.Config) { c.Duration = -1 }},
 		{"Duration", func(c *yaee.Config) { c.Duration = nan }},
@@ -110,6 +126,10 @@ func TestValidateAcceptsBoundaries(t *testing.T) {
 		func(c *yaee.Config) { c.Duration = 0 },
 		func(c *yaee.Config) { *c = smallConfig(yaee.MinSamples) },
 		func(c *yaee.Config) { c.Radius = 1; c.SampleSpacing = 0.5 },
+		func(c *yaee.Config) { c.Plates = 1 },
+		func(c *yaee.Config) { c.Plates = yaee.MaxPlates },
+		func(c *yaee.Config) { c.SampleSpacing = 5000; c.Plates = 24 }, // a plate per sample
+		func(c *yaee.Config) { c.PlateWarpAmplitude = 0 },
 	} {
 		cfg := yaee.DefaultConfig()
 		set(&cfg)
@@ -120,7 +140,10 @@ func TestValidateAcceptsBoundaries(t *testing.T) {
 }
 
 func TestConfigJSONRoundTrip(t *testing.T) {
-	cfg := yaee.Config{Seed: math.MaxUint64, Radius: 6371.0088, SampleSpacing: 0.1 + 0.2, Duration: 1e-9, TimeStep: math.Pi}
+	cfg := yaee.Config{
+		Seed: math.MaxUint64, Radius: 6371.0088, SampleSpacing: 0.1 + 0.2, Duration: 1e-9, TimeStep: math.Pi,
+		Plates: 7, PlateWarpAmplitude: 1e-300, PlateWarpFeatureSize: 1.0 / 3,
+	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -137,7 +160,8 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = `{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2}`
+	const want = `{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,` +
+		`"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500}`
 	if string(data) != want {
 		t.Fatalf("DefaultConfig as JSON:\n got %s\nwant %s", data, want)
 	}
@@ -163,8 +187,27 @@ func TestGenerateShape(t *testing.T) {
 			t.Fatalf("z does not decrease at sample %d", i)
 		}
 	}
-	if len(w.Attributes) != 1 {
-		t.Fatalf("%d attributes, want 1", len(w.Attributes))
+	if len(w.Attributes) != 2 {
+		t.Fatalf("%d attributes, want 2", len(w.Attributes))
+	}
+	plate := w.Attribute(yaee.AttrPlate)
+	if plate == nil {
+		t.Fatal("no plate attribute")
+	}
+	if plate.Unit != "" || plate.Type != yaee.Int32 || plate.Components != 1 || len(plate.Int32s) != 500 {
+		t.Fatalf("plate is %q %v x%d with %d values", plate.Unit, plate.Type, plate.Components, len(plate.Int32s))
+	}
+	used := make([]bool, cfg.Plates)
+	for i, k := range plate.Int32s {
+		if k < 0 || int(k) >= cfg.Plates {
+			t.Fatalf("sample %d has plate %d, outside 0 to %d", i, k, cfg.Plates-1)
+		}
+		used[k] = true
+	}
+	for k, u := range used {
+		if !u {
+			t.Fatalf("plate %d has no samples", k)
+		}
 	}
 	a := w.Attribute(yaee.AttrElevation)
 	if a == nil {
@@ -215,20 +258,25 @@ func TestGenerateIndependentOfProcessors(t *testing.T) {
 	}
 }
 
-// Nothing in the generator is random yet, so the seed changes only the
-// recorded Config. When a stage starts to draw random numbers this test
-// fails: replace it then with one that requires the worlds to differ.
-func TestSeedChangesNothingYet(t *testing.T) {
+// A different seed gives a different world, and nothing but the seed
+// needs to change for that.
+func TestSeedChangesTheWorld(t *testing.T) {
 	cfg := smallConfig(1000)
 	a := mustGenerate(t, cfg)
 	cfg.Seed = 12345
 	b := mustGenerate(t, cfg)
-	if a.Config == b.Config {
-		t.Fatal("the worlds record the same Config")
+	if !reflect.DeepEqual(a.Positions, b.Positions) || !reflect.DeepEqual(a.Triangles, b.Triangles) {
+		t.Fatal("the seed changed the samples or the triangles, which depend only on Radius and SampleSpacing")
 	}
-	b.Config = a.Config
-	if !reflect.DeepEqual(a, b) {
-		t.Fatal("changing only the seed changed the world: update this test and the doc comment on Config.Seed")
+	pa, pb := a.Attribute(yaee.AttrPlate).Int32s, b.Attribute(yaee.AttrPlate).Int32s
+	var differ int
+	for i := range pa {
+		if pa[i] != pb[i] {
+			differ++
+		}
+	}
+	if differ < len(pa)/2 {
+		t.Fatalf("seeds 0 and 12345 give the same plate to all but %d of %d samples", differ, len(pa))
 	}
 }
 

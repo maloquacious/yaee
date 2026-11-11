@@ -121,8 +121,11 @@ func TestNewWorld(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := NewWorld(mesh)
-	if len(w.Elevation) != 20 {
-		t.Fatalf("len(Elevation) = %d, want 20", len(w.Elevation))
+	w := NewWorld(mesh, Params{Radius: 6370, Plates: 3})
+	if len(w.Elevation) != 20 || len(w.Plate) != 20 {
+		t.Fatalf("len(Elevation) = %d, len(Plate) = %d, want 20", len(w.Elevation), len(w.Plate))
+	}
+	if w.Radius != 6370 || w.Plates != 3 || w.NumPlates != 0 || w.Mesh != mesh {
+		t.Fatalf("NewWorld did not keep its arguments: %+v", w)
 	}
 }

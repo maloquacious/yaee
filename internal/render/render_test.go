@@ -21,6 +21,7 @@ func world(t testing.TB, n int, f func(x, y, z float64) float64) *yaee.World {
 	t.Helper()
 	cfg := yaee.DefaultConfig()
 	cfg.SampleSpacing = math.Sqrt(8 * math.Pi * cfg.Radius * cfg.Radius / (math.Sqrt(3) * float64(n)))
+	cfg.Plates = min(cfg.Plates, n/10)
 	w, err := yaee.Generate(t.Context(), cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -196,14 +197,14 @@ func TestUnusableWorlds(t *testing.T) {
 
 	w := world(t, 100, flat)
 	w.Attributes = nil
-	if _, err := Elevation(w, 16); !errors.Is(err, ErrNoElevation) {
-		t.Errorf("no attributes: got %v, want ErrNoElevation", err)
+	if _, err := Elevation(w, 16); !errors.Is(err, ErrNoAttribute) {
+		t.Errorf("no attributes: got %v, want ErrNoAttribute", err)
 	}
 
 	w = world(t, 100, flat)
-	w.Attributes[0] = yaee.Attribute{Name: yaee.AttrElevation, Unit: "km", Type: yaee.Float32, Components: 1, Float32s: make([]float32, 100)}
-	if _, err := Elevation(w, 16); !errors.Is(err, ErrNoElevation) {
-		t.Errorf("float32 elevation: got %v, want ErrNoElevation", err)
+	*w.Attribute(yaee.AttrElevation) = yaee.Attribute{Name: yaee.AttrElevation, Unit: "km", Type: yaee.Float32, Components: 1, Float32s: make([]float32, 100)}
+	if _, err := Elevation(w, 16); !errors.Is(err, ErrNoAttribute) {
+		t.Errorf("float32 elevation: got %v, want ErrNoAttribute", err)
 	}
 
 	w = world(t, 100, flat)
@@ -216,5 +217,98 @@ func TestUnusableWorlds(t *testing.T) {
 	w.Positions[7] = [3]float64{2, 0, 0}
 	if _, err := Elevation(w, 16); !errors.Is(err, ErrWorld) {
 		t.Errorf("a position off the sphere: got %v, want ErrWorld", err)
+	}
+}
+
+func TestPlateColour(t *testing.T) {
+	tests := []struct {
+		plate int32
+		want  color.NRGBA
+	}{
+		{0, color.NRGBA{242, 133, 133, 255}}, // hue 0, saturation 0.45, value 0.95
+		{1, color.NRGBA{97, 242, 139, 255}},  // hue 137.508, saturation 0.6
+		{3, color.NRGBA{204, 193, 112, 255}}, // hue 52.524, value 0.8
+		{-1, color.NRGBA{255, 0, 255, 255}},
+	}
+	for _, tt := range tests {
+		if got := PlateColour(tt.plate); got != tt.want {
+			t.Errorf("PlateColour(%d) = %v, want %v", tt.plate, got, tt.want)
+		}
+	}
+	// The first 40 plates have 40 colours, none of them black, the
+	// colour of a boundary.
+	seen := map[color.NRGBA]int32{}
+	for k := range int32(1000) {
+		c := PlateColour(k)
+		if c.A != 255 || int(c.R)+int(c.G)+int(c.B) < 150 {
+			t.Fatalf("PlateColour(%d) = %v is too dark to tell from a boundary", k, c)
+		}
+		if other, dup := seen[c]; dup && k < 40 {
+			t.Errorf("plates %d and %d share the colour %v", other, k, c)
+		}
+		seen[c] = k
+	}
+}
+
+func TestPlates(t *testing.T) {
+	const width = 128
+	w := world(t, 4000, func(x, y, z float64) float64 { return 0 })
+	// Three plates split by longitude, so every boundary is a meridian.
+	plate := w.Attribute(yaee.AttrPlate).Int32s
+	for i, p := range w.Positions {
+		lon := math.Atan2(p[1], p[0]) * 180 / math.Pi
+		switch {
+		case lon < -60:
+			plate[i] = 0
+		case lon < 60:
+			plate[i] = 1
+		default:
+			plate[i] = 2
+		}
+	}
+	img, err := Plates(w, width)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := img.Bounds(); b.Dx() != width || b.Dy() != width/2 {
+		t.Fatalf("image is %dx%d, want %dx%d", b.Dx(), b.Dy(), width, width/2)
+	}
+	black := color.NRGBA{A: 255}
+	for row := 8; row < width/2-8; row++ { // away from the poles, where the meridians meet
+		var boundaries int
+		for col := range width {
+			c := img.NRGBAAt(col, row)
+			if c == black {
+				boundaries++
+				continue
+			}
+			lon := -180 + (float64(col)+0.5)*360/width
+			want := int32(2)
+			switch {
+			case lon < -60:
+				want = 0
+			case lon < 60:
+				want = 1
+			}
+			// Within a sample spacing of a boundary the nearest sample
+			// may be on either side.
+			if near := min(math.Abs(lon+60), math.Abs(lon-60), 180-math.Abs(lon)); near > 8 && c != PlateColour(want) {
+				t.Fatalf("pixel (%d, %d) at longitude %v is %v, want plate %d's %v", col, row, lon, c, want, PlateColour(want))
+			}
+		}
+		// Three boundaries cross each row, one of them at the edge of
+		// the image; each is a pixel or two wide.
+		if boundaries < 3 || boundaries > 9 {
+			t.Fatalf("row %d has %d boundary pixels, want 3 to 9", row, boundaries)
+		}
+	}
+
+	// Errors.
+	if _, err := Plates(w, 7); !errors.Is(err, ErrWidth) {
+		t.Errorf("odd width: got %v, want ErrWidth", err)
+	}
+	w.Attribute(yaee.AttrPlate).Name = "renamed"
+	if _, err := Plates(w, 16); !errors.Is(err, ErrNoAttribute) {
+		t.Errorf("no plate attribute: got %v, want ErrNoAttribute", err)
 	}
 }

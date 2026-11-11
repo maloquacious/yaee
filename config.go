@@ -23,6 +23,9 @@ const (
 	MaxSamples = sphere.MaxPoints // 357,913,941
 )
 
+// MaxPlates is the largest value of Config.Plates.
+const MaxPlates = 1000
+
 // Config is everything that determines a world. The same Config always
 // generates the same world, and the datafile records the Config that
 // produced it.
@@ -34,7 +37,7 @@ const (
 // are named by the json tags below, and decodes from that object without
 // loss:
 //
-//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2}
+//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500}
 //
 // Lengths are in kilometres (km) and times in millions of years (My).
 type Config struct {
@@ -44,9 +47,6 @@ type Config struct {
 	//
 	// In JSON it is an integer that can exceed 2^53, so a decoder that
 	// reads numbers as IEEE 754 doubles may corrupt it.
-	//
-	// As of this version nothing in the generator is random, so worlds
-	// that differ only in Seed differ only in their recorded Config.
 	Seed uint64 `json:"seed"`
 
 	// Radius is the radius of the sphere at sea level.
@@ -78,18 +78,51 @@ type Config struct {
 	// As of this version it is validated and recorded but has no effect
 	// on the world.
 	TimeStep float64 `json:"time_step_my"`
+
+	// Plates is the number of tectonic plates at the start.
+	// Unit: none. Range: 1 to MaxPlates (1000), and no more than the
+	// sample count N. Default: 40.
+	//
+	// Plates are numbered from 0 to Plates−1. Each is one connected
+	// region of samples, and together they cover the sphere.
+	Plates int `json:"plates"`
+
+	// PlateWarpAmplitude sets how far the boundaries of the initial
+	// plates depart from the straight boundaries of Voronoi cells.
+	// Unit: km. Range: finite and at least 0. Default: 1500.
+	//
+	// 0 gives plates that are exactly the Voronoi cells of their
+	// centroids: convex polygons with great-circle sides. A boundary is
+	// displaced by about 0.34 times this value on average, and never by
+	// more than 1.74 times it. Values above about half the distance
+	// between plate centroids, which is about Radius · √(4π/Plates),
+	// tear plates into pieces, and the pieces are then given to
+	// neighbouring plates.
+	PlateWarpAmplitude float64 `json:"plate_warp_amplitude_km"`
+
+	// PlateWarpFeatureSize is the length of the largest bends in the
+	// boundaries of the initial plates. Smaller bends, down to an
+	// eighth of this length, are added to them.
+	// Unit: km. Range: finite and greater than 0. Default: 2500.
+	//
+	// It has no effect when PlateWarpAmplitude is 0.
+	PlateWarpFeatureSize float64 `json:"plate_warp_feature_size_km"`
 }
 
 // DefaultConfig returns the configuration of an Earth-like world at
 // about 25 km per sample: Seed 0, Radius 6370 km, SampleSpacing 25 km,
-// Duration 250 My, TimeStep 2 My. It passes Validate.
+// Duration 250 My, TimeStep 2 My, Plates 40, PlateWarpAmplitude 1500 km,
+// PlateWarpFeatureSize 2500 km. It passes Validate.
 func DefaultConfig() Config {
 	return Config{
-		Seed:          0,
-		Radius:        6370,
-		SampleSpacing: 25,
-		Duration:      250,
-		TimeStep:      2,
+		Seed:                 0,
+		Radius:               6370,
+		SampleSpacing:        25,
+		Duration:             250,
+		TimeStep:             2,
+		Plates:               40,
+		PlateWarpAmplitude:   1500,
+		PlateWarpFeatureSize: 2500,
 	}
 }
 
@@ -109,6 +142,7 @@ func (c Config) Validate() error {
 	positive := func(v float64) bool { return v > 0 && !math.IsInf(v, 0) }
 
 	// Seed has no invalid value.
+	samples := math.NaN() // the sample count, if Radius and SampleSpacing allow one
 	if !positive(c.Radius) {
 		invalid("Radius", "must be finite and greater than 0, got %v", c.Radius)
 	}
@@ -120,6 +154,8 @@ func (c Config) Validate() error {
 		if !(n >= MinSamples && n <= MaxSamples) {
 			invalid("SampleSpacing", "with Radius %v it gives %.0f samples; the count must be from %d to %d, got spacing %v",
 				c.Radius, n, MinSamples, MaxSamples, c.SampleSpacing)
+		} else {
+			samples = n
 		}
 	}
 	if !(c.Duration >= 0) || math.IsInf(c.Duration, 0) {
@@ -127,6 +163,17 @@ func (c Config) Validate() error {
 	}
 	if !positive(c.TimeStep) {
 		invalid("TimeStep", "must be finite and greater than 0, got %v", c.TimeStep)
+	}
+	if c.Plates < 1 || c.Plates > MaxPlates {
+		invalid("Plates", "must be from 1 to %d, got %d", MaxPlates, c.Plates)
+	} else if float64(c.Plates) > samples {
+		invalid("Plates", "must be no more than the sample count, %.0f, got %d", samples, c.Plates)
+	}
+	if !(c.PlateWarpAmplitude >= 0) || math.IsInf(c.PlateWarpAmplitude, 0) {
+		invalid("PlateWarpAmplitude", "must be finite and at least 0, got %v", c.PlateWarpAmplitude)
+	}
+	if !positive(c.PlateWarpFeatureSize) {
+		invalid("PlateWarpFeatureSize", "must be finite and greater than 0, got %v", c.PlateWarpFeatureSize)
 	}
 	return errors.Join(errs...)
 }

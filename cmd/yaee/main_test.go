@@ -75,6 +75,37 @@ func TestGenerateThenRender(t *testing.T) {
 		t.Error("two runs of render wrote different images")
 	}
 
+	// Every kind of image, each different from the others.
+	seen := map[string]string{}
+	for name := range kinds {
+		mustRun(t, "render", "-in", world, "-out", image, "-kind", name, "-width", "200")
+		data := string(readFile(t, image))
+		if cfg, err := png.DecodeConfig(strings.NewReader(data)); err != nil || cfg.Width != 200 || cfg.Height != 100 {
+			t.Fatalf("the %s image is %dx%d (%v), want 200x100", name, cfg.Width, cfg.Height, err)
+		}
+		if other, dup := seen[data]; dup {
+			t.Errorf("-kind %s and -kind %s wrote the same image", name, other)
+		}
+		seen[data] = name
+	}
+	mustRun(t, "render", "-in", world, "-out", image2, "-kind", "elevation", "-width", "200")
+	mustRun(t, "render", "-in", world, "-out", image, "-width", "200")
+	if !bytes.Equal(readFile(t, image), readFile(t, image2)) {
+		t.Error("the default kind is not elevation")
+	}
+
+	// The plate flags reach the Config.
+	mustRun(t, "generate", "-spacing", "800", "-plates", "5", "-plate-warp-amplitude", "0", "-plate-warp-feature-size", "900", "-out", world2)
+	w2, err := yaee.Read(bytes.NewReader(readFile(t, world2)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = yaee.DefaultConfig()
+	want.SampleSpacing, want.Plates, want.PlateWarpAmplitude, want.PlateWarpFeatureSize = 800, 5, 0, 900
+	if w2.Config != want {
+		t.Fatalf("the datafile records Config %+v, want %+v", w2.Config, want)
+	}
+
 	// The default width.
 	mustRun(t, "render", "-in", world, "-out", image)
 	if cfg, err := png.DecodeConfig(bytes.NewReader(readFile(t, image))); err != nil || cfg.Width != 2048 || cfg.Height != 1024 {
@@ -117,7 +148,8 @@ func TestConfigFileAndWriteConfig(t *testing.T) {
 	if err := json.Unmarshal(readFile(t, out), &cfg); err != nil {
 		t.Fatal(err)
 	}
-	want := yaee.Config{Seed: 18446744073709551615, Radius: 6370, SampleSpacing: 800, Duration: 0, TimeStep: 2}
+	want := yaee.DefaultConfig()
+	want.Seed, want.SampleSpacing, want.Duration = 18446744073709551615, 800, 0
 	if cfg != want {
 		t.Fatalf("effective Config %+v, want %+v", cfg, want)
 	}
@@ -155,7 +187,7 @@ func TestFailures(t *testing.T) {
 		notDatafile:   "this is not a datafile",
 		truncated:     string(readFile(t, world)[:300]),
 		badJSON:       `{"seed": `,
-		unknownMember: `{"seed": 1, "plates": 40}`,
+		unknownMember: `{"seed": 1, "moons": 2}`,
 		twoObjects:    `{"seed": 1} {"seed": 2}`,
 	} {
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -172,7 +204,9 @@ func TestFailures(t *testing.T) {
 		{"no command", nil, 2, []string{"no command given", "Usage:"}},
 		{"unknown command", []string{"frobnicate"}, 2, []string{`unknown command "frobnicate"`}},
 		{"help for unknown command", []string{"help", "frobnicate"}, 2, []string{`unknown command "frobnicate"`}},
-		{"unknown flag", []string{"generate", "-plates", "40"}, 2, []string{"flag provided but not defined: -plates"}},
+		{"unknown flag", []string{"generate", "-moons", "2"}, 2, []string{"flag provided but not defined: -moons"}},
+		{"unknown kind", []string{"render", "-in", world, "-out", filepath.Join(dir, "x.png"), "-kind", "rivers"}, 2,
+			[]string{`unknown -kind "rivers"`, "elevation, plates"}},
 		{"malformed flag value", []string{"generate", "-radius", "big", "-out", world}, 2, []string{`invalid value "big" for flag -radius`}},
 		{"negative seed", []string{"generate", "-seed", "-1", "-out", world}, 2, []string{"for flag -seed"}},
 		{"unexpected argument", []string{"generate", "-out", world, "extra"}, 2, []string{`unexpected argument "extra"`}},
@@ -183,10 +217,11 @@ func TestFailures(t *testing.T) {
 
 		{"invalid Config", []string{"generate", "-radius", "-5", "-time-step", "0", "-out", filepath.Join(dir, "bad.yaee")}, 1,
 			[]string{"invalid config: Radius:", "invalid config: TimeStep:"}},
+		{"too many plates", []string{"generate", "-spacing", "5000", "-plates", "30", "-out", filepath.Join(dir, "bad.yaee")}, 1, []string{"invalid config: Plates:"}},
 		{"too many samples", []string{"generate", "-spacing", "1", "-out", filepath.Join(dir, "bad.yaee")}, 1, []string{"invalid config: SampleSpacing:"}},
 		{"unreadable Config", []string{"generate", "-config", missing, "-out", world}, 1, []string{missing}},
 		{"malformed Config", []string{"generate", "-config", badJSON, "-out", world}, 1, []string{badJSON}},
-		{"unknown Config member", []string{"generate", "-config", unknownMember, "-out", world}, 1, []string{unknownMember, `unknown field "plates"`}},
+		{"unknown Config member", []string{"generate", "-config", unknownMember, "-out", world}, 1, []string{unknownMember, `unknown field "moons"`}},
 		{"data after Config", []string{"generate", "-config", twoObjects, "-out", world}, 1, []string{twoObjects, "unexpected data"}},
 		{"unwritable datafile", []string{"generate", "-spacing", "1000", "-out", missing}, 1, []string{missing}},
 		{"unwritable Config", []string{"generate", "-write-config", missing}, 1, []string{missing}},
@@ -285,8 +320,8 @@ func TestHelp(t *testing.T) {
 
 	// The defaults shown for generate are the default Config.
 	_, help, _ := yaeeRun(t, "help", "generate")
-	data, _ := json.Marshal(yaee.DefaultConfig())
-	if !strings.Contains(help, string(data)) {
+	data, _ := json.MarshalIndent(yaee.DefaultConfig(), "  ", "  ")
+	if !strings.Contains(help, "\n  "+string(data)+"\n") {
 		t.Errorf("the help of generate does not show the default Config %s", data)
 	}
 }

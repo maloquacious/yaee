@@ -22,27 +22,48 @@ import (
 	"github.com/maloquacious/yaee/internal/sphere"
 )
 
-// World is the working data of a world. Per-sample data is one slice per
-// attribute, indexed by sample number.
-type World struct {
+// Params are the parameters of generation: the fields of the public
+// Config that stages read. Each has the unit and range of the Config
+// field it is copied from.
+type Params struct {
 	Radius   float64 // km
 	Duration float64 // My
 	TimeStep float64 // My
 
+	Plates               int     // number of plates at the start
+	PlateWarpAmplitude   float64 // km
+	PlateWarpFeatureSize float64 // km
+}
+
+// World is the working data of a world. Per-sample data is one slice per
+// attribute, indexed by sample number.
+type World struct {
+	Params
+
 	// Mesh holds the sample positions and their triangulation. Stages
 	// must not change it.
 	Mesh *sphere.Mesh
+
+	// NumPlates is the number of plates. Plates are numbered from 0.
+	NumPlates int
+
+	// Plate is the number of the plate each sample belongs to, from 0
+	// to NumPlates-1.
+	Plate []int32
 
 	// Elevation is the height of each sample above sea level, in km.
 	Elevation []float64
 }
 
 // NewWorld returns a World over the mesh with every per-sample slice
-// allocated and zero.
-func NewWorld(mesh *sphere.Mesh) *World {
+// allocated and zero. It has no plates: NumPlates is 0.
+func NewWorld(mesh *sphere.Mesh, params Params) *World {
+	n := len(mesh.Points)
 	return &World{
+		Params:    params,
 		Mesh:      mesh,
-		Elevation: make([]float64, len(mesh.Points)),
+		Plate:     make([]int32, n),
+		Elevation: make([]float64, n),
 	}
 }
 

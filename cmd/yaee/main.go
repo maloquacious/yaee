@@ -13,9 +13,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"image"
 	"io"
+	"maps"
 	"os"
 	"os/signal"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/maloquacious/yaee"
@@ -192,6 +196,9 @@ func generateCommand() *command {
 		spacing     = fs.Float64("spacing", def.SampleSpacing, "Distance between neighbouring samples, in `km`. Greater than 0.")
 		duration    = fs.Float64("duration", def.Duration, "Span of time simulated, in `My` (millions of years). At least 0.")
 		timeStep    = fs.Float64("time-step", def.TimeStep, "Length of one simulation step, in `My`. Greater than 0.")
+		plates      = fs.Int("plates", def.Plates, fmt.Sprintf("Number of tectonic plates at the start: an `integer` from 1 to %d, and no more than the sample count.", yaee.MaxPlates))
+		warpAmp     = fs.Float64("plate-warp-amplitude", def.PlateWarpAmplitude, "How far the initial plate boundaries are bent away from straight, in `km`. At least 0; 0 gives Voronoi cells.")
+		warpSize    = fs.Float64("plate-warp-feature-size", def.PlateWarpFeatureSize, "Length of the largest bends in the initial plate boundaries, in `km`. Greater than 0.")
 		outPath     = fs.String("out", "", "Write the datafile to this `file`, replacing it if it exists.")
 		writeConfig = fs.String("write-config", "", "Write the effective Config as JSON to this `file`, or to standard output if the value is \"-\".")
 		verbose     = fs.Bool("v", false, "Print the sample count, file size, and timings to standard error.")
@@ -199,25 +206,25 @@ func generateCommand() *command {
 	return &command{
 		name:    "generate",
 		summary: "yaee generate builds a world from a Config and writes it as a datafile.",
-		notes: `At least one of -out and -write-config is required. With -write-config
+		notes: fmt.Sprintf(`At least one of -out and -write-config is required. With -write-config
 and no -out, the Config is checked and written and no world is generated.
 
 The effective Config is the default Config, then the members of the
--config file, then -seed, -radius, -spacing, -duration, and -time-step
-where given. The defaults shown above are the default Config: an
-Earth-like world of 942059 samples. An invalid Config is reported with
-the name of each invalid field, and nothing is written.
+-config file, then each of the flags from -seed to
+-plate-warp-feature-size that is given. The defaults shown above are
+the default Config: an Earth-like world of 942059 samples. An invalid
+Config is reported with the name of each invalid field, and nothing is
+written.
 
 The Config file is one JSON object. This is the default Config:
-  {"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2}
-
+%s
 The same Config gives the same datafile, byte for byte, on the same CPU
 architecture. The default world takes about a second to generate and
-its datafile is about 53 MB.
+its datafile is about 57 MB.
 
 Example:
   yaee generate -seed 42 -out tmp/world.yaee
-`,
+`, defaultConfigJSON()),
 		flags: fs,
 		run: func(ctx context.Context, stdout, stderr io.Writer) error {
 			if *outPath == "" && *writeConfig == "" {
@@ -252,6 +259,15 @@ Example:
 			}
 			if wasSet(fs, "time-step") {
 				cfg.TimeStep = *timeStep
+			}
+			if wasSet(fs, "plates") {
+				cfg.Plates = *plates
+			}
+			if wasSet(fs, "plate-warp-amplitude") {
+				cfg.PlateWarpAmplitude = *warpAmp
+			}
+			if wasSet(fs, "plate-warp-feature-size") {
+				cfg.PlateWarpFeatureSize = *warpSize
 			}
 			if err := cfg.Validate(); err != nil {
 				return err
@@ -300,23 +316,32 @@ func renderCommand() *command {
 	var (
 		inPath  = fs.String("in", "", "Read the world from the datafile in this `file`. Required.")
 		outPath = fs.String("out", "", "Write the PNG image to this `file`, replacing it if it exists. Required.")
+		kind    = fs.String("kind", "elevation", "What to draw: `name` is one of "+kindNames()+".")
 		width   = fs.Int("width", 2048, fmt.Sprintf("Width of the image in `pixels`: an even number from %d to %d. The height is half the width.", render.MinWidth, render.MaxWidth))
 		verbose = fs.Bool("v", false, "Print the image size and timings to standard error.")
 	)
 	return &command{
 		name:    "render",
-		summary: "yaee render reads a datafile and writes an image of its elevation.",
+		summary: "yaee render reads a datafile and writes an image of one kind of its data.",
 		notes: fmt.Sprintf(`The image is drawn from the datafile alone. It is an equirectangular
 map: north is up, longitude 0 is the vertical line through the middle,
 east is to the right, and the left and right edges are longitude 180.
 Each pixel has the colour of the sample nearest to its centre.
 
-Colour is by elevation, with sea level at 0 km:
+-kind elevation colours by the "elevation" attribute, with sea level at
+0 km:
   below 0   blue, from (150, 200, 235) at sea level to (8, 24, 80) at
             %g km and below
   0 and up  from green (200, 220, 150) at sea level to brown
             (90, 50, 20) at %g km and above
   not a number   magenta (255, 0, 255)
+
+-kind plates colours by the "plate" attribute. Each plate has one
+colour; plates close in number have very different hues. A pixel is
+black where the pixel to its right or below it is on a different plate,
+so black lines trace the plate boundaries.
+
+A datafile without the attribute a kind needs is an error.
 
 The same datafile and width give the same PNG, byte for byte.
 
@@ -339,7 +364,11 @@ Example:
 				return fmt.Errorf("%s: %w", *inPath, err)
 			}
 			read := time.Now()
-			img, err := render.Elevation(world, *width)
+			draw, ok := kinds[*kind]
+			if !ok {
+				return usageError{fmt.Sprintf("unknown -kind %q; it must be one of %s", *kind, kindNames())}
+			}
+			img, err := draw(world, *width)
 			if err != nil {
 				return err
 			}
@@ -361,10 +390,31 @@ Example:
 	}
 }
 
+// defaultConfigJSON returns the default Config as indented JSON, each
+// line indented by two more spaces and ended by a newline.
+func defaultConfigJSON() string {
+	data, err := json.MarshalIndent(yaee.DefaultConfig(), "  ", "  ")
+	if err != nil {
+		panic(err) // a Config is plain data
+	}
+	return "  " + string(data) + "\n"
+}
+
+// kinds maps each value of render's -kind flag to what draws it.
+var kinds = map[string]func(*yaee.World, int) (*image.NRGBA, error){
+	"elevation": render.Elevation,
+	"plates":    render.Plates,
+}
+
+// kindNames lists the values of -kind, in alphabetical order.
+func kindNames() string {
+	return strings.Join(slices.Sorted(maps.Keys(kinds)), ", ")
+}
+
 func versionCommand() *command {
 	return &command{
 		name:    "version",
-		summary: "yaee version prints the version of the yaee library on one line, such as 0.8.0-alpha.",
+		summary: "yaee version prints the version of the yaee library on one line, such as 0.10.0-alpha.",
 		notes: `The version is what a datafile records as library_version.
 `,
 		flags: flag.NewFlagSet("version", flag.ContinueOnError),

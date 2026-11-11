@@ -31,9 +31,9 @@
 // The package does not print, read the environment or command-line
 // flags, or exit. Every failure is returned as an error.
 //
-// As of this version the generator is a skeleton: the samples and their
-// triangulation are final, but the elevation is a placeholder function
-// of position and no tectonics is simulated.
+// As of this version the samples, their triangulation, and the initial
+// plates are generated. The elevation is a placeholder function of
+// position, and no plate moves: no tectonics is simulated yet.
 //
 // The tectonic model is that of
 //
