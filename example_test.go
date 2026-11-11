@@ -42,7 +42,7 @@ func Example() {
 	// samples: 589
 	// triangles: 1174
 	// elevation: float64 in km
-	// sample 100 is at (0.248, -0.710, 0.659): continental crust, 0.245 km above sea level
+	// sample 100 is at (0.248, -0.710, 0.659): continental crust, 0.244 km above sea level
 	// sample 400 is at (0.212, 0.909, -0.360): oceanic crust, -6.702 km above sea level
 }
 

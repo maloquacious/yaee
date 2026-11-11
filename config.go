@@ -99,16 +99,17 @@ type Config struct {
 	//
 	// 0 gives plates that are exactly the Voronoi cells of their
 	// centroids: convex polygons with great-circle sides. A boundary is
-	// displaced by about 0.34 times this value on average, and never by
-	// more than 1.74 times it. Values above about half the distance
+	// displaced by about 0.41 times this value on average, and never by
+	// more than 2.91 times it. Values above about half the distance
 	// between plate centroids, which is about Radius · √(4π/Plates),
 	// tear plates into pieces, and the pieces are then given to
 	// neighbouring plates.
 	PlateWarpAmplitude float64 `json:"plate_warp_amplitude_km"`
 
 	// PlateWarpFeatureSize is the length of the largest bends in the
-	// boundaries of the initial plates. Smaller bends, down to an
-	// eighth of this length, are added to them.
+	// boundaries of the initial plates. Smaller and weaker bends, down to
+	// 1/128 of this length, are added to them, so that a boundary is
+	// irregular at every scale.
 	// Unit: km. Range: finite and greater than 0. Default: 2500.
 	//
 	// It has no effect when PlateWarpAmplitude is 0.

@@ -39,11 +39,21 @@ const (
 
 	// The warp is fractal noise of warpOctaves octaves, each with
 	// warpLacunarity times the frequency and warpGain times the
-	// amplitude of the one before. Four octaves bend a boundary at the
-	// scale of a plate and roughen it down to an eighth of that.
-	warpOctaves    = 4
+	// amplitude of the one before. The first octave has warpFirst of the
+	// warp's amplitude and bends a boundary at the scale of a plate; the
+	// rest roughen it down to 1/128 of that, 20 km with the default
+	// feature size, which is below the default sample spacing.
+	//
+	// The gain is above the usual 0.5 so that boundaries are irregular at
+	// every scale. Continents break along the initial plate boundaries
+	// when the plates first part, and those breaks become coasts: with
+	// four octaves and a gain of 0.5 they were straight lines hundreds of
+	// km long. warpFirst is the share the first octave had then, 8/15, so
+	// the large bends are as they were.
+	warpOctaves    = 8
 	warpLacunarity = 2.0
-	warpGain       = 0.5
+	warpGain       = 0.7
+	warpFirst      = 8.0 / 15
 )
 
 // Plates is the stage that divides the sphere into the initial plates
@@ -58,10 +68,11 @@ const (
 //  2. Warping. Sample i at unit position p is moved to
 //     q = p + (A/R) · (n₁(f·p), n₂(f·p), n₃(f·p)), where A is
 //     PlateWarpAmplitude, f = noise.Frequency(R, PlateWarpFeatureSize),
-//     and n₁, n₂, n₃ are three independent noise.Fractal sources. Each
-//     n is in [−1, 1] with a standard deviation of about 0.24, so a
-//     point moves about 0.34 · A km along the surface, and never more
-//     than √3 · A km.
+//     and n₁, n₂, n₃ are three independent sums of warpOctaves octaves
+//     of noise: octave k, from 0, is noise in [−1, 1] at frequency
+//     warpLacunarityᵏ, multiplied by warpFirst · warpGainᵏ. A point
+//     moves about 0.41 · A km along the surface (root mean square), and
+//     never more than 2.91 · A km.
 //  3. Assignment. Sample i goes to the plate whose centroid is nearest
 //     to q, that is, with the greatest q · c; the lowest-numbered plate
 //     wins a tie. This is the spherical Voronoi partition of the warped
@@ -147,7 +158,10 @@ type warp struct {
 // numbers whatever the amplitude, so that turning the warp off does not
 // change anything drawn after it.
 func newWarp(rng *rand.Rand, radius, amplitude, featureSize float64) warp {
-	wp := warp{scale: amplitude / radius, freq: noise.Frequency(radius, featureSize)}
+	// A Fractal divides by the sum of its octaves' amplitudes; multiply
+	// by it again so that the first octave has warpFirst of the amplitude.
+	sum := (1 - math.Pow(warpGain, warpOctaves)) / (1 - warpGain)
+	wp := warp{scale: amplitude / radius * warpFirst * sum, freq: noise.Frequency(radius, featureSize)}
 	for k := range wp.n {
 		wp.n[k] = noise.NewFractal(rng.Uint64(), warpOctaves, warpLacunarity, warpGain)
 	}

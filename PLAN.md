@@ -312,7 +312,7 @@ Done when:
 - Slab pull moves a plate's rotation axis toward its subduction front and leaves it unit length.
 - In a full-scale run, mountain ranges appear along convergent continental margins and trenches along the fronts, and the reviewer accepts the images.
 
-**Built** in version 0.15.0-alpha; the reviewer has not yet accepted the images. The code is `internal/tectonics/subduction.go`, the overlap rule of `Resample`, and `render.Orogeny`.
+**Built** in versions 0.15.0-alpha and 0.16.0-alpha; the reviewer has not yet accepted the images. The code is `internal/tectonics/subduction.go`, the overlap rule of `Resample`, and `render.Orogeny`.
 
 What was built, where the paper and the plan left a choice:
 
@@ -330,16 +330,18 @@ What was built, where the paper and the plan left a choice:
 - Continental erosion is the paper's formula as written, for continental crust above sea level only. It is 0.0045 km from the closed form for 10 km of land over 250 My.
 - `SubductionDistance` (r_s, 1800 km), `SubductionUplift` (u_0, 0.6 km/My), `ContinentalErosion` (ε_c, 0.03 km/My), and `SedimentAccretion` (ε_t, 0.3 km/My) are `Config` fields with the paper's values. d_0, β, ε, the trench width, and the front's convergence share are constants in the code.
 - `yaee render -kind orogeny` draws orogeny type and age.
+- Version 0.16.0-alpha roughened the initial plate boundaries (milestone 3's warp): eight octaves of noise with a gain of 0.7, down to 20 km, where there were four with a gain of 0.5; the largest bends are unchanged. Continents break along the initial boundaries when the plates first part, and with the smoother boundaries those coasts were straight lines hundreds of km long. A boundary now moves 0.41 of `PlateWarpAmplitude` on average.
+- Straight coasts with corners remain where two continents have met: one continent's crust is consumed along the other plate's edge, which the consumption itself wears into a smooth arc, and the cut becomes a coast when the plates part again. This is for milestone 7 to remove.
 
 Measured at full scale (942,059 samples, 250 My, 125 steps) on the development machine:
 
 | Measure | Value |
 |---------|-------|
-| `yaee generate` | 24.5 s, 624 MB peak resident memory |
+| `yaee generate` | 26 s, 624 MB peak resident memory |
 | Datafile | 133,773,268 bytes |
 | Runs with `GOMAXPROCS=1` and with the default | Identical datafile bytes |
-| Continental elevation, seed 1 | median 3.9 km, 90th percentile 6.0 km, maximum 8.1 km |
-| Samples above sea level, seed 1 | 0.187 of all; 0.019 of all are oceanic crust above sea level |
+| Continental elevation, seed 1 | median 3.9 km, 90th percentile 6.0 km, maximum 7.8 km |
+| Samples above sea level, seed 1 | 0.194 of all; 0.024 of all are oceanic crust above sea level |
 
 For milestone 9: with the paper's constants the default world's land is far too high. r_s of 1800 km reaches across most continents, u_0 is 20 times ε_c, and the young ocean that subducts is shallow, which makes h large. Away from any front, erosion alone halves the initial land, from 0.1 km to 0.047 km in 250 My.
 
