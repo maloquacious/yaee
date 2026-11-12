@@ -48,6 +48,8 @@ The model is verified in Go, by tests.
   Documentation-only commits are encouraged to bump it but are not required to.
 - Choose the bump by the change: patch for fixes, minor for new features, major for any breaking change.
   A change to the root package's exported names, to the output file's format, or to the output for a given seed is a breaking change.
+  Adding to the datafile what `docs/datafile.md` says a later version may add without changing the format version (an attribute, a section, a `META` member) is a minor change, provided every value already written for a given seed stays the same.
+  Adding an exported name or a `Config` field is a minor change.
   Go requires a new module path (`github.com/maloquacious/yaee/v2`) for major version 2 and above, so ask the user before making a breaking change.
 - Go takes a module's version from its git tags and never reads `version.go`, so the two must be kept in step by hand.
 

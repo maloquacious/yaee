@@ -1,7 +1,7 @@
 # Implementation plan
 
 This is the plan for building the generator described in [CLAUDE.md](CLAUDE.md).
-It covers the tectonic stage, from an empty repository to a tagged release.
+It covers the tectonic stage, from an empty repository to a tagged release, and the stages added since.
 Erosion and biomes come after it and are only outlined here.
 
 Section references (§) are to *Procedural Tectonic Planets*; see [docs/research/papers.md](docs/research/papers.md).
@@ -49,6 +49,7 @@ Settled:
 
 | How much relief the generator produces | Decided 2026-11-11: the generator stops at the coarse crust. The paper's §5 amplification is on hold, not ruled out: it is not implemented unless the user asks, and the per-sample data it would need (Table 1) stays in the datafile. |
 | Thin seas through continents ([#32](https://github.com/maloquacious/yaee/issues/32)) | Decided 2026-11-11: accepted, and left in the output. The generator does not close them; `docs/datafile.md` tells clients they are there. The measurements and causes are in the issue. |
+| Version bump for a new attribute | Decided 2026-11-12: minor. The datafile's format version stays 1, because the specification lets a later version add attributes. Every value already written for a given seed must stay the same; changing one is a major change. WORKFLOW.md states the rule. |
 
 Open: none.
 
@@ -511,6 +512,39 @@ Done when:
 - A coding agent given only the datafile specification writes a reader in a language other than Go, and that reader reads a generated file correctly.
 - The command's help output states every command, flag, default, and exit status.
 - The version is tagged.
+
+### 11. Rock type
+
+Tracked by [#33](https://github.com/maloquacious/yaee/issues/33).
+
+A stage after `tectonics.ElevationNoise` gives every sample a rock type, written as a new attribute `rock_type`. The client is Hāmwold, which places ore by rock type; which ores exist is the client's business, not the generator's.
+
+The stage reads only what the tectonic stages already write: `crust_type`, `orogeny_type`, `orogeny_age`, `uplift`, `oceanic_age`, and, if needed, a distance to a plate boundary or subduction front found by a multi-source breadth-first pass over sample neighbours (O(n)). It adds no plate velocities or boundary stress to the datafile.
+
+The starting classification, to be tuned:
+
+| Crust | `orogeny_type` | Rock type |
+|-------|----------------|-----------|
+| Oceanic | any | igneous |
+| Continental | 1, Andean | igneous |
+| Continental | 2, Himalayan | metamorphic |
+| Continental | 0, none | sedimentary |
+
+A seeded noise field, with its size in km, roughens the edges between classes and puts patches of each class inside the others, so that `rock_type` is not a copy of `orogeny_type`.
+For comparison, ProcGenesis WorldGen measured 42% metamorphic, 37% igneous, and 21% sedimentary on land (`~/Software/maloquacious/grift/ALGORITHMS.md` §7.2). It is a reference for the look, not a target, and it is not ported: do not port its §7.1 boundary classification, and do not copy code from that repository's `upstream/` directory, which has no licence grant.
+
+Done when:
+
+- The stage implements `model.Stage` and draws from its own random stream, seeded by the `Config` seed and the stage name.
+- Every attribute written before this milestone is byte-identical for a given `Config` with and without the stage; a test checks it.
+- `rock_type` is `u8`: 0 is "unclassified", and each class has its own value. No sample in a generated world is 0; a test checks it.
+- With a noise amplitude of 0, every sample's class follows the table above exactly; a test checks it.
+- The same seed gives the same `rock_type`. A different seed changes the noise, but not the class of samples far from any class edge; a test checks it.
+- Every tuning number is a `Config` field whose doc comment gives its unit and default, or a constant whose comment says why it is not a field. Every length is in km, never in samples.
+- `docs/datafile.md` specifies `rock_type`: its values, their meanings, and its range, plus any new `META` config members. `testdata/example.yaee` and its byte listing are regenerated, and the test that keeps them in step passes.
+- `yaee stats` reports the share of each rock type by area, on land and overall.
+- `cmd/yaee` renders a rock type image, and the reviewer accepts the full-scale images of seeds 1 to 3.
+- The version is a minor bump from 1.0.0 (see Decisions), and is tagged.
 
 ## After this plan
 
