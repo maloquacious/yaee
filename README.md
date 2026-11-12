@@ -64,7 +64,8 @@ if err != nil {
 triangle, weights := loc.Locate(x, y, z) // the triangle of samples containing it
 nearest := loc.Nearest(x, y, z)          // the index of the sample nearest to it
 t := world.Triangles[triangle]
-elevation := weights[0]*world.Elevation[t[0]] + weights[1]*world.Elevation[t[1]] + weights[2]*world.Elevation[t[2]]
+e := world.Attribute(yaee.AttrElevation).Float64s // km above sea level, one per sample
+elevation := weights[0]*e[t[0]] + weights[1]*e[t[1]] + weights[2]*e[t[2]]
 ```
 
 From the command line:
