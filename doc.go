@@ -39,9 +39,8 @@
 // The package does not print, read the environment or command-line
 // flags, or exit. Every failure is returned as an error.
 //
-// As of this version the initial plates and crust are generated, and
-// the plates then move as rigid bodies for Config.Duration, carrying
-// their crust. Where plates part, new oceanic crust forms at the ridge
+// Generate makes the initial plates and crust, and the plates then
+// move as rigid bodies for Config.Duration, carrying their crust. Where plates part, new oceanic crust forms at the ridge
 // between them, and all oceanic crust ages and sinks. Where plates
 // meet, one subducts beneath the other: a trench forms along the front,
 // the overriding plate is raised, and land erodes. Where two continents
@@ -49,6 +48,12 @@
 // and the land on both sides of the suture is raised. From time to
 // time a plate breaks into two to four plates that move apart, which
 // keeps the land from gathering into one continent.
+// After the last step, low-frequency noise is added to the elevation.
+//
+// The world is the coarse crust: it has no relief finer than the
+// sample spacing, no erosion by water, no rivers, and no climate.
+// Continents contain channels of oceanic crust a few samples wide; see
+// "crust_type" in docs/datafile.md.
 //
 // The tectonic model is that of
 //

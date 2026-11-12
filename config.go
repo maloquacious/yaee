@@ -39,9 +39,9 @@ const MaxSteps = 1_000_000
 //
 // Config is plain data. It encodes to JSON as one object whose members
 // are named by the json tags below, and decodes from that object without
-// loss:
+// loss. This is DefaultConfig:
 //
-//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-1,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.04,"subduction_distance_km":1800,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.03,"sediment_accretion_km_per_my":0.3,"collision_penetration_km":300,"collision_distance_km":4200,"collision_coefficient_per_km":0.000013,"rifting_rate_per_my":0.004}
+//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-2.5,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.17,"subduction_distance_km":600,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.1,"sediment_accretion_km_per_my":0.3,"collision_penetration_km":300,"collision_distance_km":1000,"collision_coefficient_per_km":5e-7,"rifting_rate_per_my":0.004,"elevation_noise_amplitude_km":0.5,"elevation_noise_feature_size_km":2000}
 //
 // Lengths are in kilometres (km) and times in millions of years (My).
 type Config struct {

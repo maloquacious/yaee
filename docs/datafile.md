@@ -81,6 +81,27 @@ A version 1 file written by this library has exactly these sections, in this ord
 A later version of the library may add sections of other kinds, anywhere between the header and `END `, without changing the format version.
 A reader must skip a section whose kind it does not know; see "Reading a file".
 
+### Reading a file
+
+This is what the library's reader does. A reader that follows it accepts every file the library writes and every file a later version writes with format version 1.
+
+1. Read the 12-byte header. If the identifier differs, the input is not a datafile. If the format version is not 1, the reader cannot read the file. Stop in either case.
+2. Read sections one after another until the `END ` section. For each: read the kind and the length L, then L bytes of payload, then the checksum. L has no stated limit and may be wrong in a damaged file, so do not allocate L bytes before the data arrives.
+3. Compute the checksum of every section, including one that will be skipped. If it differs from the one recorded, the file is corrupt: stop.
+4. Act on the kind:
+   - `META`, `SMPL`, `TRIS`: decode the payload. A second section of the same kind makes the file corrupt.
+   - `TRIS` and `ATTR`: corrupt if no `SMPL` section has been read, because N is not known.
+   - `ATTR`: corrupt if A is 0, C is 0, the name or the unit is not valid UTF-8, or an earlier `ATTR` section had the same name. These are checked before the element type, so they apply to an attribute that is then skipped. If the element type code is known, the payload length must be exactly as `ATTR` states.
+   - `END `: corrupt if L is not 0, or if `META`, `SMPL`, or `TRIS` has not been read. Otherwise the file is complete: stop, and read nothing after the section's checksum. Bytes that follow are not part of the file.
+   - Any other kind: skip the section.
+5. If the input ends before the checksum of the `END ` section has been read, the file is truncated.
+
+The reader enforces no order of sections beyond step 4. It accepts `META` after `SMPL`, and an `ATTR` section before `TRIS`.
+
+The reader checks the lengths that each payload's layout states, and that every triangle corner is less than N. It does not check the other properties this document states of the contents: that positions have length 1 and decreasing z, that the triangles are the Delaunay triangulation, that values are within their ranges, or which attributes are present. Those are properties of what the library writes. A reader may rely on them for a file the library wrote, and need not verify them.
+
+In `META`, the reader accepts any JSON object that has the members `library_version` and `config`, with any whitespace and member order. It ignores members it does not know, and of two members with the same name it keeps the last. It does not check the members of `config` against their ranges.
+
 ## Section payloads
 
 ### `META`
@@ -89,7 +110,7 @@ The payload is one JSON object, encoded as UTF-8, with no byte order mark and no
 
 | Member | JSON type | Meaning |
 |--------|-----------|---------|
-| `library_version` | string | The version of the `yaee` library that generated the world, as a semantic version such as `0.21.0-alpha` |
+| `library_version` | string | The version of the `yaee` library that generated the world, as a semantic version such as `0.21.1-alpha` |
 | `config` | object | The configuration that generated the world |
 
 Members of `config`:
@@ -131,11 +152,19 @@ A reader must ignore members it does not know.
 The number of samples is in the `SMPL` section.
 Do not compute it from `config`.
 
+The default configuration, which this document refers to where it gives figures for the default world, is this `config` object:
+
+```json
+{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-2.5,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.17,"subduction_distance_km":600,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.1,"sediment_accretion_km_per_my":0.3,"collision_penetration_km":300,"collision_distance_km":1000,"collision_coefficient_per_km":5e-7,"rifting_rate_per_my":0.004,"elevation_noise_amplitude_km":0.5,"elevation_noise_feature_size_km":2000}
+```
+
+The library writes the payload without whitespace, with the members in the order of the two tables above, and each number with the fewest digits that give the same 64-bit value back.
+
 ### `SMPL`
 
 | Offset | Width | Type | Field | Meaning |
 |--------|-------|------|-------|---------|
-| 0 | 4 | `u32` | N | The number of samples. At most 357,913,941 |
+| 0 | 4 | `u32` | N | The number of samples. At most 357,913,941, the most the library generates |
 | 4 | 24 × N | `f64` × 3 × N | positions | For each sample in order: x, y, z |
 
 The payload length is exactly 4 + 24 × N.
@@ -220,7 +249,7 @@ A later version of the library may add attributes, and may add element type code
 
 #### Attributes written
 
-Library version 0.21.0-alpha writes these attributes, in this order:
+Library version 0.21.1-alpha writes these attributes, in this order:
 
 | Name | Element type | Components | Unit | Range | Meaning |
 |------|--------------|------------|------|-------|---------|
@@ -255,7 +284,7 @@ No value of any attribute is NaN or infinite.
 
 `ridge_direction` and `fold_direction`:
 
-- The components are on the same axes as the positions in `SAMP`.
+- The components are on the same axes as the positions in `SMPL`.
 - A vector is either (0, 0, 0), meaning no direction is known, or perpendicular to the sample's position.
 - A `ridge_direction` that is not (0, 0, 0) has length 1. It is (0, 0, 0) for continental crust, and for oceanic crust that did not form at a ridge during the run: the initial ocean, and crust that closed a hole within one plate.
 - A `ridge_direction` and its negative mean the same ridge. The sign is that of (**p** − **q**) × **p**, with **p** the sample's position when the crust formed and **q** the nearest point of the ridge, so it is opposite on the two sides of a ridge.
@@ -379,12 +408,12 @@ In the world that results:
 ## Size
 
 For N samples the file is 12 + (16 + J) + (20 + 24 × N) + (20 + 12 × (2 × N − 4)) + 16 bytes, where J is the length of the `META` JSON, plus 16 + 4 + A + U + S × C × N for each attribute.
-The default world has N = 942,059 and, with the attributes that library version 0.21.0-alpha writes, is 133,773,466 bytes.
+The default world has N = 942,059 and, with the attributes that library version 0.21.1-alpha writes, is 133,773,466 bytes.
 
 ## Example
 
 The file `testdata/example.yaee` in the repository is 1941 bytes.
-It is the world generated by library version 0.21.0-alpha from this configuration, which gives N = 6 samples and T = 8 triangles, and, because `duration_my` is 0, the initial world:
+It is the world generated by library version 0.21.1-alpha from this configuration, which gives N = 6 samples and T = 8 triangles, and, because `duration_my` is 0, the initial world:
 
 ```json
 {"seed":42,"radius_km":6370,"sample_spacing_km":10000,"duration_my":0,"time_step_my":2,"plates":2,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-2.5,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.17,"subduction_distance_km":600,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.1,"sediment_accretion_km_per_my":0.3,"collision_penetration_km":300,"collision_distance_km":1000,"collision_coefficient_per_km":5e-7,"rifting_rate_per_my":0.004,"elevation_noise_amplitude_km":0.5,"elevation_noise_feature_size_km":2000}
@@ -393,7 +422,7 @@ It is the world generated by library version 0.21.0-alpha from this configuratio
 Its `META` payload is these 738 bytes of text:
 
 ```json
-{"library_version":"0.21.0-alpha","config":{"seed":42,"radius_km":6370,"sample_spacing_km":10000,"duration_my":0,"time_step_my":2,"plates":2,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-2.5,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.17,"subduction_distance_km":600,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.1,"sediment_accretion_km_per_my":0.3,"collision_penetration_km":300,"collision_distance_km":1000,"collision_coefficient_per_km":5e-7,"rifting_rate_per_my":0.004,"elevation_noise_amplitude_km":0.5,"elevation_noise_feature_size_km":2000}}
+{"library_version":"0.21.1-alpha","config":{"seed":42,"radius_km":6370,"sample_spacing_km":10000,"duration_my":0,"time_step_my":2,"plates":2,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-2.5,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.17,"subduction_distance_km":600,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.1,"sediment_accretion_km_per_my":0.3,"collision_penetration_km":300,"collision_distance_km":1000,"collision_coefficient_per_km":5e-7,"rifting_rate_per_my":0.004,"elevation_noise_amplitude_km":0.5,"elevation_noise_feature_size_km":2000}}
 ```
 
 Every byte of the file is listed below.
@@ -408,7 +437,7 @@ A field longer than 16 bytes continues on the following lines.
 000c  4d 45 54 41                                      section kind "META"
 0010  e2 02 00 00 00 00 00 00                          payload length = 738
 0018  7b 22 6c 69 62 72 61 72 79 5f 76 65 72 73 69 6f  payload: the JSON text shown above
-0028  6e 22 3a 22 30 2e 32 31 2e 30 2d 61 6c 70 68 61
+0028  6e 22 3a 22 30 2e 32 31 2e 31 2d 61 6c 70 68 61
 0038  22 2c 22 63 6f 6e 66 69 67 22 3a 7b 22 73 65 65
 0048  64 22 3a 34 32 2c 22 72 61 64 69 75 73 5f 6b 6d
 0058  22 3a 36 33 37 30 2c 22 73 61 6d 70 6c 65 5f 73
@@ -454,7 +483,7 @@ A field longer than 16 bytes continues on the following lines.
 02d8  74 69 6f 6e 5f 6e 6f 69 73 65 5f 66 65 61 74 75
 02e8  72 65 5f 73 69 7a 65 5f 6b 6d 22 3a 32 30 30 30
 02f8  7d 7d
-02fa  ac 4c 12 8f                                      CRC-32 of the 750 bytes from offset 000c = 8f124cac
+02fa  fe 26 25 0d                                      CRC-32 of the 750 bytes from offset 000c = 0d2526fe
 
 02fe  53 4d 50 4c                                      section kind "SMPL"
 0302  94 00 00 00 00 00 00 00                          payload length = 148
@@ -683,7 +712,7 @@ A field longer than 16 bytes continues on the following lines.
 <!-- example:end -->
 
 From the listing: sample 0 is at latitude asin(0.8333333333333334) = 0.9851 radians (56.44° north) and longitude atan2(0, 0.5527707983925666) = 0.
-Its elevation is −1 km, so its point on the surface is 6369 × (0.5527707983925666, 0, 0.8333333333333334) km from the centre.
+Its elevation is −2.5 km, so its point on the surface is 6367.5 × (0.5527707983925666, 0, 0.8333333333333334) km from the centre.
 It belongs to plate 1, as do samples 1 and 3; samples 2, 4, and 5 belong to plate 0.
 Samples 2 and 5 are continental crust, 35 km thick, at 0.1 km; the other four are oceanic crust, 7 km thick, 105.88235294117646 My old, at −2.5 km.
 Every sample has a neighbour of the other crust type, so every sample is at its coastal elevation.
@@ -727,7 +756,7 @@ func main() {
 Output:
 
 ```text
-0.21.0-alpha 6 8
+0.21.1-alpha 6 8
 [0.5527707983925666 0 0.8333333333333334] [0 5 2]
 [1 1 0 1 0 0]
 [0 0 1 0 0 1]

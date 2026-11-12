@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"os"
 	"os/exec"
 	"reflect"
 	"runtime"
@@ -260,6 +261,22 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 		`"elevation_noise_amplitude_km":0.5,"elevation_noise_feature_size_km":2000}`
 	if string(data) != want {
 		t.Fatalf("DefaultConfig as JSON:\n got %s\nwant %s", data, want)
+	}
+
+	// The documentation of Config shows the same text.
+	source, err := os.ReadFile("config.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(source), "//\t"+want+"\n") {
+		t.Error("the documentation of Config in config.go does not show DefaultConfig as JSON")
+	}
+	spec, err := os.ReadFile("docs/datafile.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(spec), "\n"+want+"\n") {
+		t.Error("docs/datafile.md does not show the default configuration")
 	}
 }
 

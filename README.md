@@ -7,16 +7,28 @@ Its output is a datafile that other applications read to build their own world m
 
 ## Status
 
-Early alpha. The tectonic simulation is complete and its defaults are tuned to give an Earth-like world: about a quarter of the sphere is land, half of the continental crust is below about 0.6 km, and the ocean floor is about 4.5 km deep.
-The sphere, the public API, the datafile format, and the command work at full scale.
-A generated world has plates and crust, continents and oceans, and its plates drift for the configured time.
-Where plates part, new ocean floor forms at the ridge between them, and ocean floor sinks as it ages.
-Where plates meet, one subducts beneath the other: a trench forms along the front, the overriding plate is raised into mountains, and land erodes.
-After the last step, low-frequency noise of up to 0.5 km is added to the elevation.
-Where two continents meet they collide: the smaller joins the other's plate, and the land around the suture is raised.
-From time to time a plate breaks into smaller plates that move apart.
+The tectonic simulation is complete, and the public API, the datafile format, and the command work at full scale.
+The version is in [version.go](version.go); while it is below 1.0, a minor version may change the API, the datafile format, or the world a seed gives.
+
+A generated world has:
+
+- plates and crust, continents and oceans, after the plates have drifted for the configured time (250 My by default);
+- ocean floor that formed at the ridges where plates part, and sinks as it ages;
+- trenches where one plate subducts beneath another, and mountains on the overriding plate;
+- mountains where two continents have collided and joined;
+- continents kept apart by plates that break into smaller plates from time to time;
+- land that erodes, and low-frequency noise of up to 0.5 km added to the elevation after the last step.
+
+With the defaults about a quarter of the sphere is land, half of the continental crust is below about 0.7 km, and half of the ocean floor is below about 4.4 km.
+
+What it does not have:
+
+- Relief finer than the sample spacing. The world is the coarse crust; a client adds detail.
+- Erosion by water, rivers, climate, or biomes.
+- Clean coasts. Continents contain channels of oceanic crust 1 to 6 samples wide, which the generator leaves in place; [docs/datafile.md](docs/datafile.md) gives their extent under `crust_type`.
+- The same bytes on every CPU architecture. A configuration gives the same datafile on machines of one architecture; ARM and AMD may differ.
+
 [PLAN.md](PLAN.md) lists what is built and what comes next.
-Until the first tagged release, the API and the datafile format may change without notice.
 
 ## What it does, and will do
 
