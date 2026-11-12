@@ -50,6 +50,9 @@ Settled:
 | How much relief the generator produces | Decided 2026-11-11: the generator stops at the coarse crust. The paper's §5 amplification is on hold, not ruled out: it is not implemented unless the user asks, and the per-sample data it would need (Table 1) stays in the datafile. |
 | Thin seas through continents ([#32](https://github.com/maloquacious/yaee/issues/32)) | Decided 2026-11-11: accepted, and left in the output. The generator does not close them; `docs/datafile.md` tells clients they are there. The measurements and causes are in the issue. |
 | Climate and biomes | Decided 2026-11-12: not part of yaee. The client computes them; Hāmwold already has its own temperature, moisture, and biomes. |
+| Where erosion acts (milestone 12) | Decided 2026-11-12: a stage after rock type that writes new attributes and leaves `elevation` as the tectonic stage made it. A minor version. Erosion inside the simulation would change `elevation` for every seed: a major version and a new module path. |
+| Erosion solver (milestone 12) | Decided 2026-11-12: the implicit stream power solver of Cordonnier et al. 2016 §5, O(n) per iteration once the samples are ordered. The analytical solution of Tzathas et al. 2024 is the fallback if it misses the time budget. |
+| Erodibility by rock type (milestone 12) | Decided 2026-11-12: yes. The erosion coefficient k is multiplied by a factor for each value of `rock_type`. |
 | `rock_type` is alpha | Decided 2026-11-12: until its tuning is settled, a change to `rock_type` values or to the `Rock*` `Config` fields is a minor version, not a major one. `docs/datafile.md` and the `AttrRockType` doc comment say so. Every other attribute keeps the rule below. |
 | Version bump for a new attribute | Decided 2026-11-12: minor. The datafile's format version stays 1, because the specification lets a later version add attributes. Every value already written for a given seed must stay the same; changing one is a major change. WORKFLOW.md states the rule. |
 
@@ -569,9 +572,57 @@ Measured at full scale, seeds 1 to 3 (`yaee stats`, shares of land area):
 
 A default run takes 36 to 45 s, as before. Every attribute of library version 1.0.0 is byte-identical for the same `Config`; `TestRockTypeAddsOnly` checks it, and a world of seed 2 at 150 km was compared with one from `v1.0.0`.
 
+### 12. Erosion
+
+Tracked by [#34](https://github.com/maloquacious/yaee/issues/34). Its three decisions are settled: see Decisions.
+
+A stage after rock type erodes the land by rivers, with the stream power law (Cordonnier et al. 2016 §3.1, equation 1; Tzathas et al. 2024 §3):
+
+	dz/dt = u − k · A^m · s^n
+
+with z the elevation, u the uplift rate, A the drainage area (the area of the land upstream of a sample, its own included), s the slope to the sample's receiver (the neighbour its water flows to), and k, m, n constants. Both papers take n = 1, which makes the implicit step solvable in one pass from the sea upstream; m is 0.5 in the first and 0.4 in the second.
+
+The stage writes new attributes and changes no existing one:
+
+| Attribute | Type | Unit | Meaning |
+|-----------|------|------|---------|
+| `eroded_elevation` | float64 | km | The elevation after erosion. Equal to `elevation` where the sample is under the sea. |
+| `drainage_area` | float64 | km² | A at the end of the stage. 0 under the sea. |
+| `receiver` | int32 | none | The sample this sample's water flows to, or −1 for a sample under the sea. Following `receiver` from any land sample reaches the sea. |
+
+Rivers are data a client can use, and the stage computes them anyway, so they are written; the stage does not draw or name rivers.
+
+The reason for the stage is the client: Hāmwold uses only the order of heights, and wants mountain ranges with a direction, not massifs (`~/Software/maloquacious/tecto/PORT_PLAN.md`, "Ranges"). tecto found that erosion made its high ground longer for its width. Judge this milestone by that measure, not by how the eroded relief looks.
+
+Where the papers are silent or do not fit, decide in this milestone and write it up in the code comment:
+
+| Gap | Notes |
+|-----|-------|
+| The boundary | The papers erode a bounded domain whose edge is the outlet. A sphere has no edge: every sample under the sea is an outlet, and only land is eroded. |
+| Depressions | Cordonnier §4.3 routes water out of lakes through passes in O(n + M log M). A priority flood from the sea, O(n log n), is the usual alternative. Either way every land sample must drain to the sea. |
+| The uplift u | `uplift` is the rate of the last step only. On land its median is 0.01 to 0.02 km/My, and 37% to 45% of continental land has some (milestone 11). Choose between that, 0 (the stage wears down relief the simulation built), or a mean over the run, which the simulation does not keep. |
+| k, m, and the time eroded | The papers' k is for 50 km domains at metre resolution. Ours must be stated in km and My, independent of the sample spacing, and tuned at 25 km. |
+| Hillslope or thermal erosion | Cordonnier §5 limits slopes to 30°. At 25 km spacing slopes are far below that, so the limit may never act; measure it. |
+| Erodibility by rock type | A factor on k for each value of `rock_type`, as `Config` fields. Which rock type erodes fastest, and by how much, is tuned here. |
+| What "high ground" and "elongated" mean | Define them in `yaee stats` before tuning, following tecto: the share of land above a height, the connected regions of it, and their length for their width. Length and width are measured on the sphere, in km. |
+
+Done when:
+
+- The stage implements `model.Stage`, runs after `rocks.RockType`, and draws from its own random stream, if it draws at all. Every attribute written before this milestone is byte-identical for a given `Config` with and without it; a test checks it.
+- Tests define correctness:
+  - A river of constant uplift and constant k reaches the analytical steady state of the stream power law with n = 1, s = (u / k) · A^(−m), within a stated tolerance.
+  - Following `receiver` from every land sample reaches the sea without a cycle, and `drainage_area` at each outlet is the area of the land that drains to it.
+  - With k = 0 and u = 0, `eroded_elevation` equals `elevation`. No sample under the sea changes.
+  - The same physics at two sample spacings: on two grids, the eroded profile of one river agrees within a stated tolerance.
+- The cost is O(n log n) per iteration or better, and a default run stays within the time budget of "Target"; state the stage's own time and memory at full scale.
+- Every tuning number is a `Config` field with unit and default, or a constant whose comment says why it is not a field.
+- `yaee stats` reports the high-ground measures, and the measured values for seeds 1 to 5, with and without erosion, are written down here. Erosion makes the high ground longer for its width, or the milestone says why not.
+- `docs/datafile.md` specifies the three attributes, their ranges, and the rule exactly enough to recompute `drainage_area` from `receiver`. The example file and its listing are regenerated.
+- `yaee render` draws the eroded elevation and the drainage, and the reviewer accepts the full-scale images of seeds 1 to 3.
+- The new attributes are alpha, as `rock_type` is: a minor version may change them until tuned. The version is a minor bump, and is tagged.
+
 ## After this plan
 
 Not planned in detail. Each needs its own plan when its turn comes.
 
-- **Erosion** ([#34](https://github.com/maloquacious/yaee/issues/34)). A further stage after rock type. References: Cordonnier et al. 2016, which combines tectonic uplift with fluvial erosion, and Tzathas et al. 2024, which gives an analytical erosion model. Both want an uplift rate per sample, which the tectonic stage computes; milestone 6 should keep it in the world data, not discard it after applying it.
 - **Relief.** The paper's §5 amplification is on hold; see Decisions. Do not start it without being asked.
