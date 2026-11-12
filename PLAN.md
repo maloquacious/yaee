@@ -2,7 +2,7 @@
 
 This is the plan for building the generator described in [CLAUDE.md](CLAUDE.md).
 It covers the tectonic stage, from an empty repository to a tagged release, and the stages added since.
-Erosion and biomes come after it and are only outlined here.
+Erosion comes after it and is only outlined here.
 
 Section references (§) are to *Procedural Tectonic Planets*; see [docs/research/papers.md](docs/research/papers.md).
 
@@ -49,6 +49,7 @@ Settled:
 
 | How much relief the generator produces | Decided 2026-11-11: the generator stops at the coarse crust. The paper's §5 amplification is on hold, not ruled out: it is not implemented unless the user asks, and the per-sample data it would need (Table 1) stays in the datafile. |
 | Thin seas through continents ([#32](https://github.com/maloquacious/yaee/issues/32)) | Decided 2026-11-11: accepted, and left in the output. The generator does not close them; `docs/datafile.md` tells clients they are there. The measurements and causes are in the issue. |
+| Climate and biomes | Decided 2026-11-12: not part of yaee. The client computes them; Hāmwold already has its own temperature, moisture, and biomes. |
 | Version bump for a new attribute | Decided 2026-11-12: minor. The datafile's format version stays 1, because the specification lets a later version add attributes. Every value already written for a given seed must stay the same; changing one is a major change. WORKFLOW.md states the rule. |
 
 Open: none.
@@ -80,7 +81,7 @@ Each is decided in the milestone shown, written up in the code comment, and adde
 
 These choices apply to every milestone.
 
-**Stages.** `Generate` runs a list of stages over the world data. Tectonics is the first and, in this plan, the only one. Erosion and biomes are added later as further stages.
+**Stages.** `Generate` runs a list of stages over the world data. Tectonics is the first, rock type (milestone 11) the second, and erosion is added later as a further stage.
 
 **Samples are fixed; plates move.** The Fibonacci samples and their triangulation are computed once (§6). Each plate keeps a rotation. Between resamplings, a plate's samples stay where they were at the last resampling, and their true position is that position turned by the plate's rotation. Nothing is re-triangulated during a run.
 
@@ -550,6 +551,5 @@ Done when:
 
 Not planned in detail. Each needs its own plan when its turn comes.
 
-- **Erosion.** A further stage after tectonics. References: Cordonnier et al. 2016, which combines tectonic uplift with fluvial erosion, and Tzathas et al. 2024, which gives an analytical erosion model. Both want an uplift rate per sample, which the tectonic stage computes; milestone 6 should keep it in the world data, not discard it after applying it.
+- **Erosion** ([#34](https://github.com/maloquacious/yaee/issues/34)). A further stage after rock type. References: Cordonnier et al. 2016, which combines tectonic uplift with fluvial erosion, and Tzathas et al. 2024, which gives an analytical erosion model. Both want an uplift rate per sample, which the tectonic stage computes; milestone 6 should keep it in the world data, not discard it after applying it.
 - **Relief.** The paper's §5 amplification is on hold; see Decisions. Do not start it without being asked.
-- **Biomes.** A further stage after erosion. It will need climate inputs that nothing in this plan produces.

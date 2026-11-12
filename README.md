@@ -25,7 +25,8 @@ With the defaults about a quarter of the sphere is land, half of the continental
 What it does not have:
 
 - Relief finer than the sample spacing. The world is the coarse crust; a client adds detail.
-- Erosion by water, rivers, climate, or biomes.
+- Erosion by water, or rivers. Erosion is planned.
+- Climate or biomes. A client computes them.
 - Clean coasts. Continents contain channels of oceanic crust 1 to 6 samples wide, which the generator leaves in place; [docs/datafile.md](docs/datafile.md) gives their extent under `crust_type`.
 - The same bytes on every CPU architecture. A configuration gives the same datafile on machines of one architecture; ARM and AMD may differ.
 
@@ -39,7 +40,7 @@ What it does not have:
 - Writes a datafile specified in [docs/datafile.md](docs/datafile.md), completely enough to write a reader in another language.
 - Provides a command, `cmd/yaee`, for developing and testing the generator, which also renders images so a person can check the look of a world.
 
-Tectonics is the first stage. Erosion is planned next, and biomes after that.
+Tectonics is the first stage. Rock type is planned next, then erosion. Climate and biomes are left to the client.
 
 ## The model
 

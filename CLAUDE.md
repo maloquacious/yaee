@@ -54,7 +54,8 @@ We want the unattended path through it: seed and configuration in, world out.
 ## Where the generator is going
 
 Tectonics is the first stage, not the whole generator.
-Erosion comes next, and eventually biomes.
+Rock type comes next, then erosion ([#34](https://github.com/maloquacious/yaee/issues/34)).
+Climate and biomes are not part of yaee: the client computes them (Hāmwold has its own temperature, moisture, and biomes). Decided 2026-11-12.
 `docs/research/papers.md` also lists two erosion papers (Cordonnier et al. 2016; Tzathas et al. 2024) as references for that work.
 
 **Relief: the generator stops at the coarse crust. §5 is on hold.**
@@ -64,7 +65,7 @@ On hold is not ruled out: do not implement §5 without being asked, and do not r
 
 So keep both paths open:
 
-- Build the generator as stages that each take the world data and add to it, so erosion and biomes can follow tectonics without reworking it.
+- Build the generator as stages that each take the world data and add to it, so rock type and erosion can follow tectonics without reworking it.
 - Keep everything the simulation computes per sample (Table 1), not just elevation. Later stages and amplification both need crust type, ages, and fold and ridge directions.
 - Give the datafile a format version and room for new per-sample data, so a later stage adds to the file instead of breaking its readers.
 
