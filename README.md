@@ -53,6 +53,20 @@ if err != nil {
 err = yaee.Write(file, world) // yaee.Read(file) reads it back
 ```
 
+To sample a world at points of your own, such as the cells of a map grid:
+
+```go
+loc, err := yaee.NewLocator(world)
+if err != nil {
+	return err
+}
+// (x, y, z) is any direction from the centre of the world; its length is ignored.
+triangle, weights := loc.Locate(x, y, z) // the triangle of samples containing it
+nearest := loc.Nearest(x, y, z)          // the index of the sample nearest to it
+t := world.Triangles[triangle]
+elevation := weights[0]*world.Elevation[t[0]] + weights[1]*world.Elevation[t[1]] + weights[2]*world.Elevation[t[2]]
+```
+
 From the command line:
 
 ```sh

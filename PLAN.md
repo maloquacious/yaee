@@ -101,7 +101,7 @@ This departs from the paper, which tracks intersections between boundary triangl
 
 | Package | Contents |
 |---------|----------|
-| `yaee` (root) | `Config`, `DefaultConfig`, `Validate`, `Generate`, `World`, reading and writing the datafile |
+| `yaee` (root) | `Config`, `DefaultConfig`, `Validate`, `Generate`, `World`, reading and writing the datafile, `Locator` (which triangle of samples contains a point, and which sample is nearest) |
 | `internal/sphere` | Vectors, rotations, Fibonacci sampling, triangulation, adjacency, point location |
 | `internal/model` | The working data of a world during generation, the stage interface, per-stage random streams |
 | `internal/noise` | Seeded coherent noise in three dimensions |

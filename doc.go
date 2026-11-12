@@ -26,6 +26,14 @@
 //	err := yaee.Write(file, world)
 //	world, err := yaee.Read(file)
 //
+// A client that wants the world on a grid of its own, such as the cells
+// of a map, builds a Locator and asks it, for each of its points, which
+// triangle of samples contains the point and which sample is nearest:
+//
+//	loc, err := yaee.NewLocator(world)
+//	triangle, weights := loc.Locate(x, y, z)
+//	sample := loc.Nearest(x, y, z)
+//
 // Lengths are in kilometres (km) and times in millions of years (My).
 //
 // The package does not print, read the environment or command-line
