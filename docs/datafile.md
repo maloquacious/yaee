@@ -251,6 +251,7 @@ No value of any attribute is NaN or infinite.
 - A coast runs between two neighbouring samples whose crust types differ. No sample lies on a coast.
 - Continental crust may lie below sea level, where the elevation noise has lowered it, and oceanic crust that subduction has raised may lie above it: `crust_type` says what the crust is made of, and `elevation` says whether it is under water. Do not derive one from the other.
 - Each sample stands for a share of the sphere's area. The share of continental samples differs from `land_coverage` by at most 1.5/N in the initial world. It changes as plates move.
+- Once plates have moved, continents contain channels of oceanic crust 1 to 6 samples wide and up to hundreds of km long. In a default world (N = 942,059), oceanic samples in channels no wider than 4 samples are 1.3% to 1.8% of all samples, and 2.8% to 3.6% with `land_coverage` 0.5. Most lie inside a single plate and stay for the rest of the simulation. The generator does not remove them. A client that does not want seas this narrow must fill them itself.
 
 `ridge_direction` and `fold_direction`:
 

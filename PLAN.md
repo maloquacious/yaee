@@ -48,6 +48,7 @@ Settled:
 | Who the documentation is for | Coding agents. They are the users of this library, command, and datafile. See "Documentation" under Design. |
 
 | How much relief the generator produces | Decided 2026-11-11: the generator stops at the coarse crust. The paper's §5 amplification is on hold, not ruled out: it is not implemented unless the user asks, and the per-sample data it would need (Table 1) stays in the datafile. |
+| Thin seas through continents ([#32](https://github.com/maloquacious/yaee/issues/32)) | Decided 2026-11-11: accepted, and left in the output. The generator does not close them; `docs/datafile.md` tells clients they are there. The measurements and causes are in the issue. |
 
 Open: none.
 
@@ -513,7 +514,6 @@ Done when:
 
 Not planned in detail. Each needs its own plan when its turn comes.
 
-- **Thin seas.** [#32](https://github.com/maloquacious/yaee/issues/32): investigate the lines of sea one or two samples wide that run through continents. Milestone 9 is done, so this may start.
 - **Erosion.** A further stage after tectonics. References: Cordonnier et al. 2016, which combines tectonic uplift with fluvial erosion, and Tzathas et al. 2024, which gives an analytical erosion model. Both want an uplift rate per sample, which the tectonic stage computes; milestone 6 should keep it in the world data, not discard it after applying it.
 - **Relief.** The paper's §5 amplification is on hold; see Decisions. Do not start it without being asked.
 - **Biomes.** A further stage after erosion. It will need climate inputs that nothing in this plan produces.
