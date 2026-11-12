@@ -21,7 +21,7 @@ type World struct {
 	Config Config
 
 	// Version is the version of this library that generated the world,
-	// as a semantic version string such as "0.6.0-alpha".
+	// as a semantic version string such as "1.0.0".
 	Version string
 
 	// Positions holds each sample's position as a unit vector (x, y, z)

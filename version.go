@@ -9,15 +9,14 @@ import (
 
 var (
 	version = semver.Version{
-		Major:      0,
-		Minor:      21,
-		Patch:      2,
-		PreRelease: "alpha",
+		Major: 1,
+		Minor: 0,
+		Patch: 0,
 	}
 )
 
 // Version returns the version of this library. World.Version records its
-// String form, such as "0.6.0-alpha".
+// String form, such as "1.0.0".
 func Version() semver.Version {
 	return version
 }

@@ -46,20 +46,17 @@ The model is verified in Go, by tests.
   The current version lives in `version.go` as a `semver.Version` literal (`Major`, `Minor`, `Patch`, `PreRelease`), from `github.com/maloquacious/semver`.
 - **Every commit that changes Go code (including `go.mod` and `go.sum`) must bump the version in `version.go`.**
   Documentation-only commits are encouraged to bump it but are not required to.
-- Choose the bump by the change: patch for fixes, minor for new features or any breaking change while below v1.0.0.
+- Choose the bump by the change: patch for fixes, minor for new features, major for any breaking change.
   A change to the root package's exported names, to the output file's format, or to the output for a given seed is a breaking change.
+  Go requires a new module path (`github.com/maloquacious/yaee/v2`) for major version 2 and above, so ask the user before making a breaking change.
 - Go takes a module's version from its git tags and never reads `version.go`, so the two must be kept in step by hand.
 
-### Untagged while in alpha
+### Tags
 
-- Keep `PreRelease: "alpha"`.
-- Do not create git tags.
+The library left alpha at v1.0.0. `version.go` has no `PreRelease`.
 
-### After alpha, API is stable, tagged
-
-- Remove `PreRelease` from `version.go` in the first commit after the decision.
-- Tag the commit.
-  The tag is `v` followed by the version in `version.go` at that commit, such as `v0.5.0`; check that they match before pushing the tag.
+- Tag every commit that bumps the version.
+  The tag is `v` followed by the version in `version.go` at that commit, such as `v1.0.0`; check that they match before pushing the tag.
 - Never move or delete a pushed tag. The Go proxy keeps the first copy it sees, so a bad tag is fixed with a new version.
 
 ## Git workflow

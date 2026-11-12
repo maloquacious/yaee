@@ -500,6 +500,8 @@ Done when:
 
 Tracked by [#10](https://github.com/maloquacious/yaee/issues/10).
 
+**Done** in version 1.0.0, tagged `v1.0.0`. The user confirmed the API as stable on 2026-11-11. A fresh agent given only `docs/datafile.md` and a generated file wrote a reader in Python whose output matched the Go reader's byte for byte; what it had to guess was fixed in the specification in version 0.21.1-alpha.
+
 Review every exported name in the root package and remove any a client does not need. Complete the documentation for coding agents: package documentation with a runnable example, the command's usage, the datafile specification, and the README. Leave alpha as WORKFLOW.md describes.
 
 Done when:

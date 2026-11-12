@@ -588,7 +588,7 @@ func kindNames() string {
 func versionCommand() *command {
 	return &command{
 		name:    "version",
-		summary: "yaee version prints the version of the yaee library on one line, such as 0.11.0-alpha.",
+		summary: "yaee version prints the version of the yaee library on one line, such as 1.0.0.",
 		notes: `The version is what a datafile records as library_version.
 `,
 		flags: flag.NewFlagSet("version", flag.ContinueOnError),

@@ -8,7 +8,8 @@ Its output is a datafile that other applications read to build their own world m
 ## Status
 
 The tectonic simulation is complete, and the public API, the datafile format, and the command work at full scale.
-The version is in [version.go](version.go); while it is below 1.0, a minor version may change the API, the datafile format, or the world a seed gives.
+The version is in [version.go](version.go), and each release is tagged `v` followed by that version.
+From 1.0.0 the API, the datafile format, and the world a seed gives change only with a major version.
 
 A generated world has:
 
