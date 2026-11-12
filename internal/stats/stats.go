@@ -69,6 +69,7 @@ type Stats struct {
 
 	OceanicAge Ages    `json:"oceanic_age_my" doc:"The oceanic_age attribute of the samples of oceanic crust. Every member is 0 if there are none."`
 	Orogeny    Orogeny `json:"orogeny" doc:"The orogeny_type attribute."`
+	Rock       Rock    `json:"rock_type" doc:"The rock_type attribute."`
 }
 
 // Distribution describes the elevations of a set of samples.
@@ -114,6 +115,16 @@ type Orogeny struct {
 	Himalayan float64 `json:"himalayan_fraction" unit:"fraction of the sphere's area, 0 to 1" doc:"Area of the samples whose orogeny_type is 2 (raised by continental collision)."`
 }
 
+// Rock describes the rock types.
+type Rock struct {
+	Igneous         float64 `json:"igneous_fraction" unit:"fraction of the sphere's area, 0 to 1" doc:"Area of the samples whose rock_type is 1 (igneous)."`
+	Metamorphic     float64 `json:"metamorphic_fraction" unit:"fraction of the sphere's area, 0 to 1" doc:"Area of the samples whose rock_type is 2 (metamorphic)."`
+	Sedimentary     float64 `json:"sedimentary_fraction" unit:"fraction of the sphere's area, 0 to 1" doc:"Area of the samples whose rock_type is 3 (sedimentary)."`
+	LandIgneous     float64 `json:"land_igneous_share" unit:"fraction of the land's area, 0 to 1" doc:"Area of the samples above 0 km whose rock_type is 1, divided by the area of all samples above 0 km. 0 if there is no land."`
+	LandMetamorphic float64 `json:"land_metamorphic_share" unit:"fraction of the land's area, 0 to 1" doc:"As land_igneous_share, for rock_type 2."`
+	LandSedimentary float64 `json:"land_sedimentary_share" unit:"fraction of the land's area, 0 to 1" doc:"As land_igneous_share, for rock_type 3."`
+}
+
 // A Key documents one value of the JSON encoding of a Stats.
 type Key struct {
 	// Path is the member's name, with the names of the objects that
@@ -149,7 +160,7 @@ func Keys() []Key {
 // Measure returns the statistics of a world.
 //
 // The world must have the attributes plate, crust_type, elevation,
-// oceanic_age, and orogeny_type as Generate produces them; otherwise the
+// oceanic_age, orogeny_type, and rock_type as Generate produces them; otherwise the
 // error wraps ErrNoAttribute. It wraps ErrWorld if the samples and
 // triangles are not a triangulation of the sphere, and ErrValue if an
 // elevation or oceanic age is not finite or a plate number is negative.
@@ -177,7 +188,11 @@ func Measure(w *yaee.World) (*Stats, error) {
 	if err != nil {
 		return nil, err
 	}
-	plate, crust, z, age, orogeny := plateAttr.Int32s, crustAttr.Uint8s, elevationAttr.Float64s, ageAttr.Float64s, orogenyAttr.Uint8s
+	rockAttr, err := attribute(w, yaee.AttrRockType, yaee.Uint8)
+	if err != nil {
+		return nil, err
+	}
+	plate, crust, z, age, orogeny, rock := plateAttr.Int32s, crustAttr.Uint8s, elevationAttr.Float64s, ageAttr.Float64s, orogenyAttr.Uint8s, rockAttr.Uint8s
 
 	numPlates := 0
 	for i := range n {
@@ -247,9 +262,29 @@ func Measure(w *yaee.World) (*Stats, error) {
 		case yaee.OrogenyHimalayan:
 			s.Orogeny.Himalayan += a
 		}
+		var all, onLand *float64
+		switch rock[i] {
+		case yaee.RockIgneous:
+			all, onLand = &s.Rock.Igneous, &s.Rock.LandIgneous
+		case yaee.RockMetamorphic:
+			all, onLand = &s.Rock.Metamorphic, &s.Rock.LandMetamorphic
+		case yaee.RockSedimentary:
+			all, onLand = &s.Rock.Sedimentary, &s.Rock.LandSedimentary
+		}
+		if all != nil {
+			*all += a
+			if land(i) {
+				*onLand += a
+			}
+		}
 	}
 	if oceanicArea > 0 {
 		s.OceanicAge.Mean = ageSum / oceanicArea
+	}
+	if s.LandFraction > 0 {
+		s.Rock.LandIgneous /= s.LandFraction
+		s.Rock.LandMetamorphic /= s.LandFraction
+		s.Rock.LandSedimentary /= s.LandFraction
 	}
 
 	order := make([]int32, n)

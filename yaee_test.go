@@ -49,6 +49,7 @@ func TestDefaultConfig(t *testing.T) {
 		SubductionDistance: 600, SubductionUplift: 0.6, ContinentalErosion: 0.1, SedimentAccretion: 0.3,
 		CollisionPenetration: 300, CollisionDistance: 1000, CollisionCoefficient: 5e-7,
 		RiftingRate: 0.004, ElevationNoiseAmplitude: 0.5, ElevationNoiseFeatureSize: 2000,
+		RockNoiseAmplitude: 500, RockNoiseFeatureSize: 1000, RockReach: 300, RockOrogenyMaxAge: 150, RockArcUplift: 0.01,
 	}
 	if cfg != want {
 		t.Fatalf("DefaultConfig() = %+v, want %+v", cfg, want)
@@ -64,17 +65,20 @@ func TestZeroConfigInvalid(t *testing.T) {
 	// LandCoverage, MaxPlateSpeed, OceanicDampening, SubductionDistance,
 	// SubductionUplift, ContinentalErosion, SedimentAccretion,
 	// CollisionPenetration, CollisionDistance, CollisionCoefficient,
-	// RiftingRate, and ElevationNoiseAmplitude, and for nothing else. A zero TrenchElevation is invalid only because it is not
+	// RiftingRate, ElevationNoiseAmplitude, RockNoiseAmplitude, RockOrogenyMaxAge, and
+	// RockArcUplift, and for nothing else. A zero TrenchElevation is invalid only because it is not
 	// below the AbyssalElevation.
 	for _, field := range []string{"Radius", "SampleSpacing", "TimeStep", "Plates", "PlateWarpFeatureSize",
-		"RidgeElevation", "AbyssalElevation", "TrenchElevation", "MaxContinentalElevation", "ElevationNoiseFeatureSize"} {
+		"RidgeElevation", "AbyssalElevation", "TrenchElevation", "MaxContinentalElevation", "ElevationNoiseFeatureSize",
+		"RockNoiseFeatureSize", "RockReach"} {
 		if !strings.Contains(err.Error(), ": "+field+": ") {
 			t.Errorf("error does not name %s: %v", field, err)
 		}
 	}
 	for _, field := range []string{"Seed", "Duration", "PlateWarpAmplitude", "LandCoverage", "MaxPlateSpeed", "OceanicDampening",
 		"SubductionDistance", "SubductionUplift", "ContinentalErosion", "SedimentAccretion",
-		"CollisionPenetration", "CollisionDistance", "CollisionCoefficient", "RiftingRate", "ElevationNoiseAmplitude"} {
+		"CollisionPenetration", "CollisionDistance", "CollisionCoefficient", "RiftingRate", "ElevationNoiseAmplitude",
+		"RockNoiseAmplitude", "RockOrogenyMaxAge", "RockArcUplift"} {
 		if strings.Contains(err.Error(), ": "+field+": ") {
 			t.Errorf("error names %s, whose zero is valid: %v", field, err)
 		}
@@ -156,6 +160,16 @@ func TestValidateNamesField(t *testing.T) {
 		{"ElevationNoiseAmplitude", func(c *yaee.Config) { c.ElevationNoiseAmplitude = nan }},
 		{"ElevationNoiseFeatureSize", func(c *yaee.Config) { c.ElevationNoiseFeatureSize = 0 }},
 		{"ElevationNoiseFeatureSize", func(c *yaee.Config) { c.ElevationNoiseFeatureSize = inf }},
+		{"RockNoiseAmplitude", func(c *yaee.Config) { c.RockNoiseAmplitude = -1 }},
+		{"RockNoiseAmplitude", func(c *yaee.Config) { c.RockNoiseAmplitude = inf }},
+		{"RockNoiseFeatureSize", func(c *yaee.Config) { c.RockNoiseFeatureSize = 0 }},
+		{"RockNoiseFeatureSize", func(c *yaee.Config) { c.RockNoiseFeatureSize = nan }},
+		{"RockReach", func(c *yaee.Config) { c.RockReach = 0 }},
+		{"RockReach", func(c *yaee.Config) { c.RockReach = inf }},
+		{"RockOrogenyMaxAge", func(c *yaee.Config) { c.RockOrogenyMaxAge = -1 }},
+		{"RockOrogenyMaxAge", func(c *yaee.Config) { c.RockOrogenyMaxAge = inf }},
+		{"RockArcUplift", func(c *yaee.Config) { c.RockArcUplift = -0.01 }},
+		{"RockArcUplift", func(c *yaee.Config) { c.RockArcUplift = nan }},
 		{"Duration", func(c *yaee.Config) { c.Duration = 2*yaee.MaxSteps + 1 }},
 		{"Duration", func(c *yaee.Config) { c.Duration = 1; c.TimeStep = 1e-7 }},
 		{"SampleSpacing", func(c *yaee.Config) { c.SampleSpacing = 1e-300 }},
@@ -212,6 +226,9 @@ func TestValidateAcceptsBoundaries(t *testing.T) {
 		func(c *yaee.Config) { c.ElevationNoiseAmplitude = 0 },
 		func(c *yaee.Config) { c.ElevationNoiseAmplitude = 100 },
 		func(c *yaee.Config) { c.ElevationNoiseFeatureSize = 1e-3 },
+		func(c *yaee.Config) { c.RockNoiseAmplitude = 0 },
+		func(c *yaee.Config) { c.RockOrogenyMaxAge, c.RockArcUplift = 0, 0 },
+		func(c *yaee.Config) { c.RockNoiseFeatureSize, c.RockReach = 1e-3, 1e-3 },
 		func(c *yaee.Config) { c.Duration = 2 * yaee.MaxSteps },
 		func(c *yaee.Config) {
 			c.RidgeElevation, c.AbyssalElevation, c.TrenchElevation, c.MaxContinentalElevation = -1e-9, -2e-9, -3e-9, 1e-9
@@ -234,6 +251,8 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 		SubductionDistance: 1234.5, SubductionUplift: 2.0 / 3, ContinentalErosion: 1e-5, SedimentAccretion: 0.7,
 		CollisionPenetration: 123.25, CollisionDistance: 3999.5, CollisionCoefficient: 2.5e-6,
 		RiftingRate: 1.0 / 300, ElevationNoiseAmplitude: 0.1 * 3, ElevationNoiseFeatureSize: 1e7 / 3,
+		RockNoiseAmplitude: 0.1 + 0.7, RockNoiseFeatureSize: 1e-6, RockReach: 4321.5,
+		RockOrogenyMaxAge: 1.0 / 9, RockArcUplift: 0.0125,
 	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
@@ -258,7 +277,9 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 		`"oceanic_dampening_km_per_my":0.17,"subduction_distance_km":600,"subduction_uplift_km_per_my":0.6,` +
 		`"continental_erosion_km_per_my":0.1,"sediment_accretion_km_per_my":0.3,` +
 		`"collision_penetration_km":300,"collision_distance_km":1000,"collision_coefficient_per_km":5e-7,"rifting_rate_per_my":0.004,` +
-		`"elevation_noise_amplitude_km":0.5,"elevation_noise_feature_size_km":2000}`
+		`"elevation_noise_amplitude_km":0.5,"elevation_noise_feature_size_km":2000,` +
+		`"rock_noise_amplitude_km":500,"rock_noise_feature_size_km":1000,"rock_reach_km":300,` +
+		`"rock_orogeny_max_age_my":150,"rock_arc_uplift_km_per_my":0.01}`
 	if string(data) != want {
 		t.Fatalf("DefaultConfig as JSON:\n got %s\nwant %s", data, want)
 	}
@@ -317,6 +338,7 @@ func TestGenerateShape(t *testing.T) {
 		{yaee.AttrOrogenyType, "", yaee.Uint8, 1},
 		{yaee.AttrFoldDirection, "", yaee.Float64, 3},
 		{yaee.AttrUplift, "km/My", yaee.Float64, 1},
+		{yaee.AttrRockType, "", yaee.Uint8, 1},
 	}
 	if len(w.Attributes) != len(want) {
 		t.Fatalf("%d attributes, want %d", len(w.Attributes), len(want))

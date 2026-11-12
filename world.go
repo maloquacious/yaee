@@ -142,6 +142,27 @@ const (
 	// It is 0 where nothing was raised, and for every sample when
 	// Config.Duration is 0.
 	AttrUplift = "uplift"
+
+	// AttrRockType is the kind of rock at the surface. Type Uint8,
+	// 1 component, no unit. Values: RockIgneous (1), RockMetamorphic
+	// (2), or RockSedimentary (3); never RockUnclassified (0) in a world
+	// that Generate returns.
+	//
+	// Alpha: until the rule is settled, a minor version may change the
+	// values of this attribute for a given Config, and the Config
+	// fields named Rock*. No other attribute is affected.
+	//
+	// Oceanic crust is RockIgneous. Continental crust gets a base rock
+	// type by the first rule that applies: RockIgneous if its uplift is
+	// greater than Config.RockArcUplift (an active volcanic arc);
+	// RockIgneous for OrogenyAndean and RockMetamorphic for
+	// OrogenyHimalayan, if the orogeny age is at most
+	// Config.RockOrogenyMaxAge; otherwise RockSedimentary. Noise then
+	// moves the edges between those regions and may put patches of one
+	// inside another; Config.RockNoiseAmplitude says how. With
+	// Config.RockNoiseAmplitude 0 the rock type is the base rock type, a
+	// function of the crust type, uplift, orogeny type, and orogeny age.
+	AttrRockType = "rock_type"
 )
 
 // Values of the AttrCrustType attribute.
@@ -155,6 +176,14 @@ const (
 	OrogenyNone      uint8 = 0 // no mountain building has affected the sample
 	OrogenyAndean    uint8 = 1 // raised where an oceanic plate subducts beneath it
 	OrogenyHimalayan uint8 = 2 // raised by the collision of two continents
+)
+
+// Values of the AttrRockType attribute.
+const (
+	RockUnclassified uint8 = 0 // not written by Generate
+	RockIgneous      uint8 = 1 // formed from magma: ocean floor and volcanic arcs
+	RockMetamorphic  uint8 = 2 // changed by heat and pressure: collision belts
+	RockSedimentary  uint8 = 3 // laid down in layers: quiet continental interiors
 )
 
 // NumSamples returns the number of samples.

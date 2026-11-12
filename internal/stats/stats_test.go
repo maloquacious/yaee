@@ -32,6 +32,8 @@ const testRadius = 1000.0
 //     crust, except 1.1 km on the oceanic crust where y > 0.95.
 //   - Oceanic age is 100·(1 − |z|) My on oceanic crust.
 //   - Orogeny is Himalayan where z > 0.9 and Andean where y > 0.95.
+//   - Rock type is metamorphic where z > 0.9, sedimentary on the rest
+//     of the continental crust, and igneous on oceanic crust.
 func constructed(t *testing.T, n int) (*yaee.World, *sphere.Mesh) {
 	t.Helper()
 	mesh, err := sphere.Triangulate(sphere.FibonacciPoints(n))
@@ -48,7 +50,7 @@ func constructed(t *testing.T, n int) (*yaee.World, *sphere.Mesh) {
 	for t := range w.Triangles {
 		w.Triangles[t] = [3]int32(mesh.Tri[3*t : 3*t+3])
 	}
-	plate, crust, orogeny := make([]int32, n), make([]uint8, n), make([]uint8, n)
+	plate, crust, orogeny, rock := make([]int32, n), make([]uint8, n), make([]uint8, n), make([]uint8, n)
 	z, age := make([]float64, n), make([]float64, n)
 	for i, p := range mesh.Points {
 		w.Positions[i] = [3]float64{p.X, p.Y, p.Z}
@@ -67,6 +69,14 @@ func constructed(t *testing.T, n int) (*yaee.World, *sphere.Mesh) {
 		default:
 			z[i], age[i] = -4.2, 100*(1-math.Abs(p.Z))
 		}
+		switch {
+		case orogeny[i] == yaee.OrogenyHimalayan:
+			rock[i] = yaee.RockMetamorphic
+		case crust[i] == yaee.CrustContinental:
+			rock[i] = yaee.RockSedimentary
+		default:
+			rock[i] = yaee.RockIgneous
+		}
 	}
 	w.Attributes = []yaee.Attribute{
 		{Name: yaee.AttrPlate, Type: yaee.Int32, Components: 1, Int32s: plate},
@@ -74,6 +84,7 @@ func constructed(t *testing.T, n int) (*yaee.World, *sphere.Mesh) {
 		{Name: yaee.AttrElevation, Unit: "km", Type: yaee.Float64, Components: 1, Float64s: z},
 		{Name: yaee.AttrOceanicAge, Unit: "My", Type: yaee.Float64, Components: 1, Float64s: age},
 		{Name: yaee.AttrOrogenyType, Type: yaee.Uint8, Components: 1, Uint8s: orogeny},
+		{Name: yaee.AttrRockType, Type: yaee.Uint8, Components: 1, Uint8s: rock},
 	}
 	return w, mesh
 }
@@ -143,6 +154,16 @@ func TestMeasureConstructedWorld(t *testing.T) {
 	near(t, "orogeny.himalayan_fraction", s.Orogeny.Himalayan, sum(peak), exact)
 	near(t, "orogeny.himalayan_fraction", s.Orogeny.Himalayan, 0.05, coarse)
 	near(t, "orogeny.andean_fraction", s.Orogeny.Andean, sum(island), exact)
+
+	oceanic := func(p sphere.Vec, i int) bool { return !north(p, i) && !south(p, i) }
+	near(t, "rock_type.igneous_fraction", s.Rock.Igneous, sum(oceanic), exact)
+	near(t, "rock_type.metamorphic_fraction", s.Rock.Metamorphic, sum(peak), exact)
+	near(t, "rock_type.sedimentary_fraction", s.Rock.Sedimentary, sum(north)-sum(peak)+sum(south), exact)
+	near(t, "rock_type.sedimentary_fraction", s.Rock.Sedimentary, 0.15+0.1, coarse)
+	land := sum(north) + sum(island)
+	near(t, "rock_type.land_igneous_share", s.Rock.LandIgneous, sum(island)/land, exact)
+	near(t, "rock_type.land_metamorphic_share", s.Rock.LandMetamorphic, sum(peak)/land, exact)
+	near(t, "rock_type.land_sedimentary_share", s.Rock.LandSedimentary, (sum(north)-sum(peak))/land, exact)
 
 	// Elevation: 0.05 at 2, 0.15 at 0.25, 0.1 at −0.3, 0.025 at 1.1,
 	// and 0.675 at −4.2.

@@ -220,6 +220,11 @@ func generateCommand() *command {
 		riftRate    = fs.Float64("rifting-rate", def.RiftingRate, "Mean number of times per My that a wholly continental plate of average initial area breaks into smaller plates, in `1/My`. At least 0; 0 gives plates that never rift.")
 		noiseAmp    = fs.Float64("elevation-noise-amplitude", def.ElevationNoiseAmplitude, "Greatest change that the low-frequency noise applied after the simulation makes to an elevation, in `km`. At least 0; 0 gives no noise.")
 		noiseSize   = fs.Float64("elevation-noise-feature-size", def.ElevationNoiseFeatureSize, "Distance across the largest features of the elevation noise, in `km`. Greater than 0.")
+		rockAmp     = fs.Float64("rock-noise-amplitude", def.RockNoiseAmplitude, "How far the noise moves the edges between rock types of continental crust, in `km`: up to twice this either way. At least 0; 0 gives every sample the rock type of its crust and orogeny.")
+		rockSize    = fs.Float64("rock-noise-feature-size", def.RockNoiseFeatureSize, "Distance across the largest features of the rock type noise, in `km`. Greater than 0.")
+		rockMaxAge  = fs.Float64("rock-orogeny-max-age", def.RockOrogenyMaxAge, "Greatest orogeny age at which an orogeny still sets the rock type, in `My`; older belts are sedimentary. At least 0.")
+		rockArc     = fs.Float64("rock-arc-uplift", def.RockArcUplift, "Uplift rate above which continental crust is igneous rock (an active volcanic arc), in `km/My`. At least 0.")
+		rockReach   = fs.Float64("rock-reach", def.RockReach, "Distance beyond which a rock type's nearness no longer favours it, in `km`. Greater than 0. A sample farther than this from every other rock type changes type only where the noise makes a patch, and never if it is at least twice -rock-noise-amplitude.")
 		outPath     = fs.String("out", "", "Write the datafile to this `file`, replacing it if it exists.")
 		writeConfig = fs.String("write-config", "", "Write the effective Config as JSON to this `file`, or to standard output if the value is \"-\".")
 		verbose     = fs.Bool("v", false, "Print the sample count, file size, and timings to standard error.")
@@ -344,6 +349,21 @@ Example:
 			if wasSet(fs, "elevation-noise-feature-size") {
 				cfg.ElevationNoiseFeatureSize = *noiseSize
 			}
+			if wasSet(fs, "rock-noise-amplitude") {
+				cfg.RockNoiseAmplitude = *rockAmp
+			}
+			if wasSet(fs, "rock-noise-feature-size") {
+				cfg.RockNoiseFeatureSize = *rockSize
+			}
+			if wasSet(fs, "rock-reach") {
+				cfg.RockReach = *rockReach
+			}
+			if wasSet(fs, "rock-orogeny-max-age") {
+				cfg.RockOrogenyMaxAge = *rockMaxAge
+			}
+			if wasSet(fs, "rock-arc-uplift") {
+				cfg.RockArcUplift = *rockArc
+			}
 			if err := cfg.Validate(); err != nil {
 				return err
 			}
@@ -452,6 +472,12 @@ attributes. Where the type is 0 (none), oceanic crust is pale blue
 Type 2 (Himalayan: raised by continental collision) runs from dark
 violet (63, 0, 125) at 0 My to pale violet (188, 189, 220) at 250 My
 and above. The most recent mountain building is the darkest.
+
+-kind rock colours by the "crust_type" and "rock_type" attributes.
+Oceanic crust, which is always igneous, is slate blue (70, 85, 110).
+Continental crust is red (200, 60, 45) where igneous, violet
+(120, 70, 170) where metamorphic, and sand (230, 205, 140) where
+sedimentary. Any other combination is magenta (255, 0, 255).
 
 A datafile without the attribute a kind needs is an error.
 
@@ -578,6 +604,7 @@ var kinds = map[string]func(*yaee.World, int) (*image.NRGBA, error){
 	"elevation": render.Elevation,
 	"orogeny":   render.Orogeny,
 	"plates":    render.Plates,
+	"rock":      render.RockType,
 }
 
 // kindNames lists the values of -kind, in alphabetical order.

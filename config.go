@@ -41,7 +41,7 @@ const MaxSteps = 1_000_000
 // are named by the json tags below, and decodes from that object without
 // loss. This is DefaultConfig:
 //
-//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-2.5,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.17,"subduction_distance_km":600,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.1,"sediment_accretion_km_per_my":0.3,"collision_penetration_km":300,"collision_distance_km":1000,"collision_coefficient_per_km":5e-7,"rifting_rate_per_my":0.004,"elevation_noise_amplitude_km":0.5,"elevation_noise_feature_size_km":2000}
+//	{"seed":0,"radius_km":6370,"sample_spacing_km":25,"duration_my":250,"time_step_my":2,"plates":40,"plate_warp_amplitude_km":1500,"plate_warp_feature_size_km":2500,"land_coverage":0.3,"ridge_elevation_km":-2.5,"abyssal_elevation_km":-6,"trench_elevation_km":-10,"max_continental_elevation_km":10,"max_plate_speed_km_per_my":100,"oceanic_dampening_km_per_my":0.17,"subduction_distance_km":600,"subduction_uplift_km_per_my":0.6,"continental_erosion_km_per_my":0.1,"sediment_accretion_km_per_my":0.3,"collision_penetration_km":300,"collision_distance_km":1000,"collision_coefficient_per_km":5e-7,"rifting_rate_per_my":0.004,"elevation_noise_amplitude_km":0.5,"elevation_noise_feature_size_km":2000,"rock_noise_amplitude_km":500,"rock_noise_feature_size_km":1000,"rock_reach_km":300,"rock_orogeny_max_age_my":150,"rock_arc_uplift_km_per_my":0.01}
 //
 // Lengths are in kilometres (km) and times in millions of years (My).
 type Config struct {
@@ -352,6 +352,60 @@ type Config struct {
 	//
 	// It has no effect when ElevationNoiseAmplitude is 0.
 	ElevationNoiseFeatureSize float64 `json:"elevation_noise_feature_size_km"`
+
+	// RockNoiseAmplitude is how far the noise that roughens the rock
+	// type moves the edges between rock types of continental crust.
+	// Unit: km. Range: finite and at least 0. Default: 500.
+	//
+	// The rock type is an alpha feature: its rule and defaults may
+	// change in a minor version (see AttrRockType).
+	//
+	// After the simulation each sample gets a base rock type from its
+	// crust (see AttrRockType). A continental sample then takes the rock
+	// type c with the greatest score −min(d_c, RockReach) +
+	// RockNoiseAmplitude · F_c, where d_c is the distance to the nearest
+	// continental sample whose base rock type is c and F_c is smooth
+	// noise from −1 to 1, one field for each rock type. An edge between
+	// rock types moves by up to 2 · RockNoiseAmplitude either way. A
+	// sample farther than RockReach from every other rock type changes
+	// type only in patches, and never if 2 · RockNoiseAmplitude is at
+	// most RockReach. 0 gives every sample its base rock type.
+	RockNoiseAmplitude float64 `json:"rock_noise_amplitude_km"`
+
+	// RockNoiseFeatureSize is the distance across the largest features
+	// of that noise. Features down to a quarter of this size are added
+	// at lower strength.
+	// Unit: km. Range: finite and greater than 0. Default: 1000.
+	//
+	// It has no effect when RockNoiseAmplitude is 0.
+	RockNoiseFeatureSize float64 `json:"rock_noise_feature_size_km"`
+
+	// RockReach is the distance beyond which a rock type's nearness no
+	// longer favours it, in the score that RockNoiseAmplitude describes.
+	// Unit: km. Range: finite and greater than 0. Default: 300.
+	//
+	// It has no effect when RockNoiseAmplitude is 0.
+	RockReach float64 `json:"rock_reach_km"`
+
+	// RockOrogenyMaxAge is the greatest orogeny age at which an orogeny
+	// still sets the rock type. Older belts are taken to be worn down
+	// and covered by sediment.
+	// Unit: My. Range: finite and at least 0. Default: 150.
+	//
+	// Continental crust whose orogeny age is greater than this has the
+	// base rock type of crust with no orogeny, RockSedimentary, unless
+	// RockArcUplift makes it RockIgneous. See AttrRockType.
+	RockOrogenyMaxAge float64 `json:"rock_orogeny_max_age_my"`
+
+	// RockArcUplift is the uplift rate above which continental crust is
+	// an active volcanic arc, of base rock type RockIgneous, whatever its
+	// orogeny.
+	// Unit: km/My. Range: finite and at least 0. Default: 0.01.
+	//
+	// It is compared with the AttrUplift attribute: the rate at which
+	// subduction raised the sample in the last step. Values at or above
+	// 2 · SubductionUplift turn the rule off.
+	RockArcUplift float64 `json:"rock_arc_uplift_km_per_my"`
 }
 
 // DefaultConfig returns the configuration of an Earth-like world at
@@ -364,8 +418,10 @@ type Config struct {
 // SubductionUplift 0.6 km/My, ContinentalErosion 0.1 km/My,
 // SedimentAccretion 0.3 km/My, CollisionPenetration 300 km,
 // CollisionDistance 1000 km, CollisionCoefficient 5e-7 per km,
-// RiftingRate 0.004 per My, ElevationNoiseAmplitude 0.5 km, and
-// ElevationNoiseFeatureSize 2000 km. It passes Validate.
+// RiftingRate 0.004 per My, ElevationNoiseAmplitude 0.5 km,
+// ElevationNoiseFeatureSize 2000 km, RockNoiseAmplitude 500 km,
+// RockNoiseFeatureSize 1000 km, RockReach 300 km, RockOrogenyMaxAge
+// 150 My, and RockArcUplift 0.01 km/My. It passes Validate.
 //
 // Six of these differ from the paper's Table 3, which has RidgeElevation
 // −1, OceanicDampening 0.04, SubductionDistance 1800, ContinentalErosion
@@ -405,6 +461,12 @@ func DefaultConfig() Config {
 
 		ElevationNoiseAmplitude:   0.5,
 		ElevationNoiseFeatureSize: 2000,
+
+		RockNoiseAmplitude:   500,
+		RockNoiseFeatureSize: 1000,
+		RockReach:            300,
+		RockOrogenyMaxAge:    150,
+		RockArcUplift:        0.01,
 	}
 }
 
@@ -497,6 +559,9 @@ func (c Config) Validate() error {
 		{"CollisionCoefficient", c.CollisionCoefficient},
 		{"RiftingRate", c.RiftingRate},
 		{"ElevationNoiseAmplitude", c.ElevationNoiseAmplitude},
+		{"RockNoiseAmplitude", c.RockNoiseAmplitude},
+		{"RockOrogenyMaxAge", c.RockOrogenyMaxAge},
+		{"RockArcUplift", c.RockArcUplift},
 	} {
 		if !(f.value >= 0) || math.IsInf(f.value, 0) {
 			invalid(f.name, "must be finite and at least 0, got %v", f.value)
@@ -504,6 +569,12 @@ func (c Config) Validate() error {
 	}
 	if !positive(c.ElevationNoiseFeatureSize) {
 		invalid("ElevationNoiseFeatureSize", "must be finite and greater than 0, got %v", c.ElevationNoiseFeatureSize)
+	}
+	if !positive(c.RockNoiseFeatureSize) {
+		invalid("RockNoiseFeatureSize", "must be finite and greater than 0, got %v", c.RockNoiseFeatureSize)
+	}
+	if !positive(c.RockReach) {
+		invalid("RockReach", "must be finite and greater than 0, got %v", c.RockReach)
 	}
 	return errors.Join(errs...)
 }

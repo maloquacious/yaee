@@ -405,7 +405,7 @@ func exampleWorld(t testing.TB) *yaee.World {
 	cfg.Plates = 2
 	cfg.Duration = 0 // the initial world, which later versions change least
 	w := mustGenerate(t, cfg)
-	w.Version = "1.0.0"
+	w.Version = "1.1.0"
 	return w
 }
 

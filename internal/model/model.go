@@ -57,6 +57,12 @@ type Params struct {
 
 	ElevationNoiseAmplitude   float64 // km; see tectonics.ElevationNoise
 	ElevationNoiseFeatureSize float64 // km
+
+	RockNoiseAmplitude   float64 // km; see rocks.RockType
+	RockNoiseFeatureSize float64 // km
+	RockReach            float64 // km
+	RockOrogenyMaxAge    float64 // My
+	RockArcUplift        float64 // km/My
 }
 
 // Values of World.CrustType.
@@ -71,6 +77,17 @@ const (
 	OrogenyAndean    uint8 = 1 // raised by subduction (§4.1)
 	OrogenyHimalayan uint8 = 2 // raised by continental collision (§4.2)
 )
+
+// Values of World.RockType.
+const (
+	RockUnclassified uint8 = 0
+	RockIgneous      uint8 = 1
+	RockMetamorphic  uint8 = 2
+	RockSedimentary  uint8 = 3
+)
+
+// NumRockTypes is one more than the greatest value of World.RockType.
+const NumRockTypes = 4
 
 // World is the working data of a world. Per-sample data is one slice per
 // attribute, indexed by sample number.
@@ -167,6 +184,10 @@ type World struct {
 	// trench, in km. It is at least 0, and 0 outside a trench. The
 	// sample's elevation without the trench is Elevation + Trench.
 	Trench []float64
+
+	// RockType is RockIgneous, RockMetamorphic, or RockSedimentary once
+	// the rock type stage has run, and RockUnclassified before it.
+	RockType []uint8
 }
 
 // NewWorld returns a World over the mesh with every per-sample slice
@@ -190,6 +211,7 @@ func NewWorld(mesh *sphere.Mesh, params Params) *World {
 		Subducted:      make([]bool, n),
 		Uplift:         make([]float64, n),
 		Trench:         make([]float64, n),
+		RockType:       make([]uint8, n),
 	}
 }
 

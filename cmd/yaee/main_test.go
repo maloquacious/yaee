@@ -112,7 +112,9 @@ func TestGenerateThenRender(t *testing.T) {
 		"-trench-elevation", "-8", "-max-continental-elevation", "9", "-max-plate-speed", "60", "-oceanic-dampening", "0.02",
 		"-subduction-distance", "900", "-subduction-uplift", "0.3", "-continental-erosion", "0.01", "-sediment-accretion", "0.5",
 		"-collision-penetration", "150", "-collision-distance", "2000", "-collision-coefficient", "5e-6", "-rifting-rate", "0.01",
-		"-elevation-noise-amplitude", "0.25", "-elevation-noise-feature-size", "1500", "-out", world2)
+		"-elevation-noise-amplitude", "0.25", "-elevation-noise-feature-size", "1500",
+		"-rock-noise-amplitude", "100", "-rock-noise-feature-size", "700", "-rock-reach", "250",
+		"-rock-orogeny-max-age", "80", "-rock-arc-uplift", "0.05", "-out", world2)
 	w2, err = yaee.Read(bytes.NewReader(readFile(t, world2)))
 	if err != nil {
 		t.Fatal(err)
@@ -125,6 +127,8 @@ func TestGenerateThenRender(t *testing.T) {
 	want.CollisionPenetration, want.CollisionDistance, want.CollisionCoefficient = 150, 2000, 5e-6
 	want.RiftingRate = 0.01
 	want.ElevationNoiseAmplitude, want.ElevationNoiseFeatureSize = 0.25, 1500
+	want.RockNoiseAmplitude, want.RockNoiseFeatureSize, want.RockReach = 100, 700, 250
+	want.RockOrogenyMaxAge, want.RockArcUplift = 80, 0.05
 	if w2.Config != want {
 		t.Fatalf("the datafile records Config %+v, want %+v", w2.Config, want)
 	}

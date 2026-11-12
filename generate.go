@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/maloquacious/yaee/internal/model"
+	"github.com/maloquacious/yaee/internal/rocks"
 	"github.com/maloquacious/yaee/internal/sphere"
 	"github.com/maloquacious/yaee/internal/tectonics"
 )
@@ -33,7 +34,19 @@ func Generate(ctx context.Context, cfg Config) (*World, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	mw, err := newModelWorld(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := model.Run(ctx, mw, cfg.Seed, stages()); err != nil {
+		return nil, err
+	}
+	return export(cfg, mw), nil
+}
 
+// newModelWorld returns the working data for a valid cfg, before any
+// stage has run.
+func newModelWorld(cfg Config) (*model.World, error) {
 	// The samples and their triangulation are computed once and never
 	// change (§6).
 	mesh, err := sphere.Triangulate(sphere.FibonacciPoints(cfg.sampleCount()))
@@ -41,7 +54,7 @@ func Generate(ctx context.Context, cfg Config) (*World, error) {
 		return nil, fmt.Errorf("yaee: triangulating %d samples: %w", cfg.sampleCount(), err)
 	}
 
-	mw := model.NewWorld(mesh, model.Params{
+	return model.NewWorld(mesh, model.Params{
 		Radius:               cfg.Radius,
 		Duration:             cfg.Duration,
 		TimeStep:             cfg.TimeStep,
@@ -72,16 +85,18 @@ func Generate(ctx context.Context, cfg Config) (*World, error) {
 
 		ElevationNoiseAmplitude:   cfg.ElevationNoiseAmplitude,
 		ElevationNoiseFeatureSize: cfg.ElevationNoiseFeatureSize,
-	})
-	if err := model.Run(ctx, mw, cfg.Seed, stages()); err != nil {
-		return nil, err
-	}
-	return export(cfg, mw), nil
+
+		RockNoiseAmplitude:   cfg.RockNoiseAmplitude,
+		RockNoiseFeatureSize: cfg.RockNoiseFeatureSize,
+		RockReach:            cfg.RockReach,
+		RockOrogenyMaxAge:    cfg.RockOrogenyMaxAge,
+		RockArcUplift:        cfg.RockArcUplift,
+	}), nil
 }
 
 // stages returns the stages of generation, in the order they run.
 func stages() []model.Stage {
-	return []model.Stage{tectonics.Plates{}, tectonics.Crust{}, tectonics.Motion{}, tectonics.Simulation{}, tectonics.ElevationNoise{}}
+	return []model.Stage{tectonics.Plates{}, tectonics.Crust{}, tectonics.Motion{}, tectonics.Simulation{}, tectonics.ElevationNoise{}, rocks.RockType{}}
 }
 
 // export copies the working data into a World.
@@ -109,6 +124,7 @@ func export(cfg Config, mw *model.World) *World {
 		{Name: AttrOrogenyType, Unit: "", Type: Uint8, Components: 1, Uint8s: mw.OrogenyType},
 		{Name: AttrFoldDirection, Unit: "", Type: Float64, Components: 3, Float64s: flatten(mw.FoldDirection)},
 		{Name: AttrUplift, Unit: "km/My", Type: Float64, Components: 1, Float64s: mw.Uplift},
+		{Name: AttrRockType, Unit: "", Type: Uint8, Components: 1, Uint8s: mw.RockType},
 	}
 	return w
 }

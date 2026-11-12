@@ -50,6 +50,7 @@ Settled:
 | How much relief the generator produces | Decided 2026-11-11: the generator stops at the coarse crust. The paper's §5 amplification is on hold, not ruled out: it is not implemented unless the user asks, and the per-sample data it would need (Table 1) stays in the datafile. |
 | Thin seas through continents ([#32](https://github.com/maloquacious/yaee/issues/32)) | Decided 2026-11-11: accepted, and left in the output. The generator does not close them; `docs/datafile.md` tells clients they are there. The measurements and causes are in the issue. |
 | Climate and biomes | Decided 2026-11-12: not part of yaee. The client computes them; Hāmwold already has its own temperature, moisture, and biomes. |
+| `rock_type` is alpha | Decided 2026-11-12: until its tuning is settled, a change to `rock_type` values or to the `Rock*` `Config` fields is a minor version, not a major one. `docs/datafile.md` and the `AttrRockType` doc comment say so. Every other attribute keeps the rule below. |
 | Version bump for a new attribute | Decided 2026-11-12: minor. The datafile's format version stays 1, because the specification lets a later version add attributes. Every value already written for a given seed must stay the same; changing one is a major change. WORKFLOW.md states the rule. |
 
 Open: none.
@@ -111,6 +112,7 @@ This departs from the paper, which tracks intersections between boundary triangl
 | `internal/tectonics` | Plates, motion, resampling, and the four phenomena |
 | `internal/render` | Check images, drawn from a `World` |
 | `internal/stats` | Measurements of a `World`, for tuning and review |
+| `internal/rocks` | The rock type stage |
 | `cmd/yaee` | The development command |
 
 ## Milestones
@@ -546,6 +548,26 @@ Done when:
 - `yaee stats` reports the share of each rock type by area, on land and overall.
 - `cmd/yaee` renders a rock type image, and the reviewer accepts the full-scale images of seeds 1 to 3.
 - The version is a minor bump from 1.0.0 (see Decisions), and is tagged.
+
+**Done** in version 1.1.0. The reviewer accepted the full-scale images of seeds 1 to 3 on 2026-11-12. `rock_type` stays alpha (see Decisions). The code is `internal/rocks` (`RockType`), `render.RockType`, and the `rock_type` member of `yaee stats`.
+
+What was built, where the issue left a choice:
+
+- The starting table gave almost no sedimentary rock: in 250 My about 90% of continental crust has had an orogeny, and an orogeny type never wears off. Land shares for seeds 1 to 3 were 0.31 to 0.42 igneous, 0.51 to 0.68 metamorphic, and 0.01 to 0.07 sedimentary. Two rules were added before the table, as the issue suggested:
+  - An orogeny older than `RockOrogenyMaxAge` (150 My) counts as none, so old belts are sedimentary.
+  - Continental crust whose `uplift` is above `RockArcUplift` (0.01 km/My) is igneous, as an active arc. The orogeny type alone cannot find arcs: it records only the first orogeny of crust above sea level, so crust raised behind a subduction front is often Himalayan or old Andean. Any uplift above 0 covers 37% to 45% of continental land, since uplift reaches `SubductionDistance` behind a front; its median there is 0.01 to 0.02 km/My.
+- The noise: a continental sample takes the rock type c with the greatest −min(d_c, `RockReach`) + `RockNoiseAmplitude` · F_c, with d_c the distance to the nearest continental sample of base type c and F_c one noise field per type. Oceanic crust is not a source, so a coast is not made igneous. With 2 · `RockNoiseAmplitude` above `RockReach` the noise also makes patches inside the interiors. Defaults: amplitude 500 km, reach 300 km, feature size 1000 km.
+- Tuned by rerunning the stage alone on saved full-scale worlds. Without the uplift rule, a cutoff of 150 My leaves 0.05 to 0.12 of land igneous.
+
+Measured at full scale, seeds 1 to 3 (`yaee stats`, shares of land area):
+
+| Seed | Igneous | Metamorphic | Sedimentary |
+|------|---------|-------------|-------------|
+| 1 | 0.34 | 0.24 | 0.42 |
+| 2 | 0.22 | 0.21 | 0.58 |
+| 3 | 0.29 | 0.22 | 0.50 |
+
+A default run takes 36 to 45 s, as before. Every attribute of library version 1.0.0 is byte-identical for the same `Config`; `TestRockTypeAddsOnly` checks it, and a world of seed 2 at 150 km was compared with one from `v1.0.0`.
 
 ## After this plan
 

@@ -229,6 +229,53 @@ func Orogeny(w *yaee.World, width int) (*image.NRGBA, error) {
 	}), nil
 }
 
+// RockType draws the world's rock type as an equirectangular image with
+// the size and layout that Elevation documents. A pixel takes its colour
+// from the sample nearest to its centre: RockColour of that sample's
+// crust type and rock type.
+func RockType(w *yaee.World, width int) (*image.NRGBA, error) {
+	crust := w.Attribute(yaee.AttrCrustType)
+	if crust == nil || crust.Type != yaee.Uint8 || crust.Components != 1 || len(crust.Uint8s) != w.NumSamples() {
+		return nil, attributeError(w, yaee.AttrCrustType, "uint8")
+	}
+	rock := w.Attribute(yaee.AttrRockType)
+	if rock == nil || rock.Type != yaee.Uint8 || rock.Components != 1 || len(rock.Uint8s) != w.NumSamples() {
+		return nil, attributeError(w, yaee.AttrRockType, "uint8")
+	}
+	grid, err := nearestSamples(w, width)
+	if err != nil {
+		return nil, err
+	}
+	return paint(grid, width, func(sample int32) color.NRGBA {
+		return RockColour(crust.Uint8s[sample], rock.Uint8s[sample])
+	}), nil
+}
+
+// RockColour returns the colour of a sample with the given crust type
+// and rock type:
+//
+//	oceanic crust, RockIgneous           (70, 85, 110), a slate blue
+//	continental crust, RockIgneous       (200, 60, 45), a red
+//	continental crust, RockMetamorphic   (120, 70, 170), a violet
+//	continental crust, RockSedimentary   (230, 205, 140), a sand
+//
+// Oceanic crust is drawn dark so that the rock types of the continents
+// stand out. Any other combination is magenta, (255, 0, 255). Alpha is
+// always 255.
+func RockColour(crust, rock uint8) color.NRGBA {
+	switch {
+	case crust == yaee.CrustOceanic && rock == yaee.RockIgneous:
+		return color.NRGBA{R: 70, G: 85, B: 110, A: 255}
+	case crust == yaee.CrustContinental && rock == yaee.RockIgneous:
+		return color.NRGBA{R: 200, G: 60, B: 45, A: 255}
+	case crust == yaee.CrustContinental && rock == yaee.RockMetamorphic:
+		return color.NRGBA{R: 120, G: 70, B: 170, A: 255}
+	case crust == yaee.CrustContinental && rock == yaee.RockSedimentary:
+		return color.NRGBA{R: 230, G: 205, B: 140, A: 255}
+	}
+	return color.NRGBA{R: 255, G: 0, B: 255, A: 255}
+}
+
 // OldestOrogeny is the age in My at which the colours of OrogenyColour
 // end.
 const OldestOrogeny = 250.0

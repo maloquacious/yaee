@@ -561,3 +561,78 @@ func TestOrogeny(t *testing.T) {
 		}
 	}
 }
+
+func TestRockColour(t *testing.T) {
+	magenta := color.NRGBA{255, 0, 255, 255}
+	for _, c := range []struct {
+		crust, rock uint8
+		want        color.NRGBA
+	}{
+		{yaee.CrustOceanic, yaee.RockIgneous, color.NRGBA{70, 85, 110, 255}},
+		{yaee.CrustContinental, yaee.RockIgneous, color.NRGBA{200, 60, 45, 255}},
+		{yaee.CrustContinental, yaee.RockMetamorphic, color.NRGBA{120, 70, 170, 255}},
+		{yaee.CrustContinental, yaee.RockSedimentary, color.NRGBA{230, 205, 140, 255}},
+		{yaee.CrustOceanic, yaee.RockSedimentary, magenta},
+		{yaee.CrustContinental, yaee.RockUnclassified, magenta},
+		{yaee.CrustContinental, 4, magenta},
+		{7, yaee.RockIgneous, magenta},
+	} {
+		if got := RockColour(c.crust, c.rock); got != c.want {
+			t.Errorf("RockColour(%d, %d) = %v, want %v", c.crust, c.rock, got, c.want)
+		}
+	}
+}
+
+func TestRockType(t *testing.T) {
+	const width = 128
+	w := world(t, 4000, func(x, y, z float64) float64 { return 0 })
+	// Ocean south of the equator; north of it sedimentary, igneous
+	// north of 30° north, and metamorphic north of 60° north.
+	crust := w.Attribute(yaee.AttrCrustType).Uint8s
+	rock := w.Attribute(yaee.AttrRockType).Uint8s
+	at := func(z float64) (uint8, uint8) {
+		switch {
+		case z > 0.866:
+			return yaee.CrustContinental, yaee.RockMetamorphic
+		case z > 0.5:
+			return yaee.CrustContinental, yaee.RockIgneous
+		case z > 0:
+			return yaee.CrustContinental, yaee.RockSedimentary
+		}
+		return yaee.CrustOceanic, yaee.RockIgneous
+	}
+	for i, p := range w.Positions {
+		crust[i], rock[i] = at(p[2])
+	}
+	img, err := RockType(w, width)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := img.Bounds(); b.Dx() != width || b.Dy() != width/2 {
+		t.Fatalf("image is %dx%d, want %dx%d", b.Dx(), b.Dy(), width, width/2)
+	}
+	seen := map[color.NRGBA]int{}
+	for row := range width / 2 {
+		for col := range width {
+			_, _, z := pixelCentre(col, row, width)
+			if math.Abs(z) < 0.1 || math.Abs(z-0.5) < 0.1 || math.Abs(z-0.866) < 0.1 {
+				continue // either side of a border
+			}
+			got, want := img.NRGBAAt(col, row), RockColour(at(z))
+			if got != want {
+				t.Fatalf("pixel (%d, %d) at z = %v is %v, want %v", col, row, z, got, want)
+			}
+			seen[got]++
+		}
+	}
+	if len(seen) != 4 {
+		t.Fatalf("%d colours in the image, want 4: %v", len(seen), seen)
+	}
+
+	for _, name := range []string{yaee.AttrRockType, yaee.AttrCrustType} {
+		w.Attribute(name).Name = "renamed"
+		if _, err := RockType(w, 16); !errors.Is(err, ErrNoAttribute) {
+			t.Errorf("no %s attribute: got %v, want ErrNoAttribute", name, err)
+		}
+	}
+}
